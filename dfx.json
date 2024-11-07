@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "satslink_backend": {
+      "candid": "src/satslink_backend/satslink_backend.did",
+      "package": "satslink_backend",
+      "type": "rust"
+    },
+    "satslink_frontend": {
+      "dependencies": [
+        "satslink_backend"
+      ],
+      "source": [
+        "src/satslink_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "satslink_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
