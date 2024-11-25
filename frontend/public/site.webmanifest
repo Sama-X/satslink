@@ -1,0 +1,19 @@
+{
+    "name": "MSQ.Satslink - ICP Satslinking PoS On-Chain Miner",
+    "short_name": "MSQ.Satslink",
+    "icons": [
+        {
+            "src": "/android-chrome-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#161721",
+    "background_color": "#161721",
+    "display": "standalone"
+}
