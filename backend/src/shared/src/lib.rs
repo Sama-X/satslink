@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 pub mod satslinker;
 pub mod cmc;
-pub mod decideid;
+// pub mod decideid;
 mod env;
 pub mod icrc1;
 
