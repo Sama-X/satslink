@@ -10,13 +10,13 @@ opt-level = 'z'
 panic = 'abort'
 
 [workspace.dependencies]
-ic-cdk = "0.13"
+ic-cdk = "0.17.0"
 ic-stable-structures = "0.6"
-ic-cdk-timers = "0.7"
+ic-cdk-timers = "0.11.0"
 ic-verifiable-credentials = { path = "../verifiable-credentials-sdk/rust-packages/ic-verifiable-credentials" }
 ic-canister-sig-creation = "1.1"
 ic-e8s = "0.1.2"
-ic-ledger-types = "0.13"
+ic-ledger-types = "0.14.0"
 icrc-ledger-types = "0.1"
 candid = "0.10"
 serde = "1.0"
@@ -24,5 +24,5 @@ num-bigint = "0.4"
 chrono = { version = "0.4", default-features = false }
 futures = { version = "0.3", default-features = false }
 lazy_static = "1.4"
-garde = { version = "0.18", features = ["derive"] }
+garde = { version = "0.20.0", features = ["derive"] }
 sha2 = "0.10"

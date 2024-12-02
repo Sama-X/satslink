@@ -6,13 +6,14 @@ type GetSatslinkersResponse = record {
 };
 type GetTotalsResponse = record {
   total_lottery_participants : nat64;
+  total_pledge_shares_supply : nat;
   your_lottery_eligibility_status : bool;
   current_satslink_token_reward : nat;
+  total_vip_participants : nat64;
   total_pos_participants : nat64;
   pos_start_key : opt principal;
   your_share_tcycles : nat;
   total_satslink_token_dev : nat;
-  total_pledge_shares_supply : nat;
   icp_to_cycles_exchange_rate : nat;
   total_icp_shares_supply : nat;
   total_satslink_token_minted : nat;
@@ -31,7 +32,7 @@ type RefundLostTokensRequest = record { kind : RefundTokenKind };
 type RefundLostTokensResponse = record { results : vec Result };
 type RefundTokenKind = variant { ICP : vec record { blob; nat64 } };
 type Result = variant { Ok : nat; Err : text };
-type StakeRequest = record { qty_e8s_u64 : nat64 };
+type StakeRequest = record { qty_e8s_u64 : nat64; enable_lottery : bool };
 type WithdrawRequest = record { to : principal; qty_e8s : nat };
 service : () -> {
   can_migrate_msq_account : () -> (bool) query;
