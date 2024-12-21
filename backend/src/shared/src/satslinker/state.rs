@@ -242,7 +242,7 @@ impl SatslinkerState {
         let satslink_amount = qty.clone();
     
         // Update the user's SATSLINK share and unclaimed reward
-        let (satslink_share, pledge_satslink_time, unclaimed_reward) = if let Some((mut cur_satslink_share ,cur_pledge_satslink_time, cur_unclaimed_reward)) = cur_opt
+        let (satslink_share, pledge_satslink_time, unclaimed_reward) = if let Some((mut cur_satslink_share ,_, cur_unclaimed_reward)) = cur_opt
         {
             cur_satslink_share += qty; // Increase the user's SATSLINK share
             (cur_satslink_share, pledge_time.clone(), cur_unclaimed_reward)

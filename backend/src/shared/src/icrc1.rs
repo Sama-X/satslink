@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_cdk::{api::call::CallResult, call};
 use ic_e8s::c::E8s;
+use candid::Nat;
 use icrc_ledger_types::{
     icrc1::account::Account,
     icrc1::transfer::{BlockIndex, TransferArg, TransferError},
@@ -20,6 +21,10 @@ impl ICRC1CanisterClient {
         call(self.canister_id, "icrc1_balance_of", (arg,)).await
     }
 
+    pub async fn icrc1_minting_account(&self) -> CallResult<(Option<Account>,)> {
+        call(self.canister_id, "icrc1_minting_account", ()).await
+    }
+
     pub async fn icrc1_transfer(
         &self,
         arg: TransferArg,
@@ -32,5 +37,12 @@ impl ICRC1CanisterClient {
         arg: TransferFromArgs,
     ) -> CallResult<(Result<BlockIndex, TransferFromError>,)> {
         call(self.canister_id, "icrc2_transfer_from", (arg,)).await
+    }
+    pub async fn icrc1_decimals(&self) -> CallResult<(u8,)> {
+        call(self.canister_id, "icrc1_decimals", ()).await
+    }
+
+    pub async fn icrc1_fee(&self) -> CallResult<(Nat,)> {
+        call(self.canister_id, "icrc1_fee", ()).await
     }
 }

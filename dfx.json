@@ -5,6 +5,11 @@
       "type": "custom",
       "wasm": "backend/src/can_satslink_token/satslink.wasm"
     },
+    "test_token": {
+      "candid": "backend/src/can_satslink_token/can.did",
+      "type": "custom",
+      "wasm": "backend/src/can_satslink_token/satslink.wasm"
+    },
     "satslinker": {
       "candid": "backend/src/can_satslinker/can.did",
       "package": "satslinker",
