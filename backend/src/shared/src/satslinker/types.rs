@@ -23,7 +23,7 @@ pub const UPDATE_SEED_DOMAIN: &[u8] = b"msq-satslink-update-seed";
 pub const SATSLINKER_REDISTRIBUTION_SUBACCOUNT: [u8; 32] = [0u8; 32];
 pub const SATSLINKER_LOTTERY_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,];
 pub const SATSLINKER_DEV_FEE_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,];
-pub const SATSLINKER_SWAPPOOL_FEE_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,];
+pub const SATSLINKER_SWAPPOOL_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,];
 
 pub const REDISTRIBUTION_LOTTERY_SHARE_E8S: u64 = 1000_0000;    // 10%
 pub const REDISTRIBUTION_SWAPPOOL_SHARE_E8S: u64 = 6000_0000;  // 60%

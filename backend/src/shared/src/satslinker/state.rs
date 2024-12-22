@@ -455,7 +455,7 @@ impl SatslinkerState {
 
             icp_to_cycles_exchange_rate: icp_to_cycles_exchange_rate,
 
-            your_vip_shares: TCycles::from(share_1),
+            your_vip_shares: share_1,
             your_vip_unclaimed_reward_e8s: unclaimed_reward_1,
             your_vip_eligibility_status: vip_status,
             your_pledge_shares: share_2,

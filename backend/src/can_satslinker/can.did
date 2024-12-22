@@ -12,7 +12,7 @@ type GetTotalsResponse = record {
   your_vip_eligibility_status : bool;
   your_pledge_shares : nat;
   total_satslink_token_dev : nat;
-  your_vip_shares : nat;
+  your_vip_shares : nat64;
   icp_to_cycles_exchange_rate : nat;
   your_vip_unclaimed_reward_e8s : nat;
   total_satslink_token_minted : nat;

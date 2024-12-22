@@ -31,7 +31,7 @@ pub struct GetTotalsResponse {
     pub total_vip_participants: u64,
     pub icp_to_cycles_exchange_rate: TCycles,
 
-    pub your_vip_shares: TCycles,
+    pub your_vip_shares: u64,
     pub your_vip_unclaimed_reward_e8s: E8s,
     pub your_vip_eligibility_status: bool,
     pub your_pledge_shares: TCycles,

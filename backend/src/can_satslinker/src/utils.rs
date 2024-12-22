@@ -38,7 +38,7 @@ use shared::{
             SATSLINKER_DEV_FEE_SUBACCOUNT, 
             SATSLINKER_REDISTRIBUTION_SUBACCOUNT,
             SATSLINKER_LOTTERY_SUBACCOUNT,
-            SATSLINKER_SWAPPOOL_FEE_SUBACCOUNT,
+            SATSLINKER_SWAPPOOL_SUBACCOUNT,
             ICPSWAP_PRICE_UPDATE_INTERVAL_NS,
             REDISTRIBUTION_DEV_SHARE_E8S,
             REDISTRIBUTION_SWAPPOOL_SHARE_E8S, 
@@ -229,7 +229,7 @@ fn redistribute_icps() {
                 let qty_to_dev = balance_e8s * REDISTRIBUTION_DEV_SHARE_E8S / one_e8s;         //30%
 
                 // send half to the swap (pool) canister
-                let swappool_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SWAPPOOL_FEE_SUBACCOUNT));
+                let swappool_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SWAPPOOL_SUBACCOUNT));
                 let _ = ic_ledger_types::transfer(
                     ENV_VARS.icp_token_canister_id,
                     TransferArgs {
