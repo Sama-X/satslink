@@ -2,13 +2,12 @@ use std::{cell::RefCell, time::Duration};
 
 use candid::{Nat, Principal};
 use ic_cdk::{
-    api::{call::CallResult, management_canister::main::raw_rand},
+    api::management_canister::main::raw_rand,
     caller, 
     id, 
     spawn,
 };
 use ic_e8s::c::E8s;
-
 use ic_cdk_timers::set_timer;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc1::account::Account;
@@ -38,24 +37,20 @@ use shared::{
             ICP_REDISTRIBUTION_INTERVAL_NS,
             SATSLINKER_DEV_FEE_SUBACCOUNT, 
             SATSLINKER_REDISTRIBUTION_SUBACCOUNT,
-            SATSLINKER_SPIKE_SUBACCOUNT,
+            SATSLINKER_LOTTERY_SUBACCOUNT,
+            SATSLINKER_SWAPPOOL_FEE_SUBACCOUNT,
             ICPSWAP_PRICE_UPDATE_INTERVAL_NS,
             REDISTRIBUTION_DEV_SHARE_E8S,
-            REDISTRIBUTION_FURNACE_SHARE_E8S, 
-            REDISTRIBUTION_SPIKE_SHARE_E8S, 
+            REDISTRIBUTION_SWAPPOOL_SHARE_E8S, 
+            REDISTRIBUTION_LOTTERY_SHARE_E8S, 
             POS_ROUND_DELAY_NS,
             POS_ROUND_START_REWARD_E8S
         },
     },
-    cmc::{
-        CMCClient, 
-        NotifyTopUpError, 
-        NotifyTopUpRequest
-    },
+    cmc::CMCClient, 
     icrc1::ICRC1CanisterClient,
     ENV_VARS,
     ICP_FEE, 
-    MEMO_TOP_UP_CANISTER,
 };
 
 use crate::subaccount_of;
@@ -69,9 +64,6 @@ thread_local! {
             vip_shares: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))),
             ),
-            icp_shares: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))),
-            ),
             pledge_shares:StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))),
             ),
@@ -82,13 +74,7 @@ thread_local! {
             vip_participants: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
             ),
-            pos_participants: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
-            ),
             pledge_participants: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
-            ),
-            lottery_participants: StableBTreeMap::init(
                 MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
             ),
         }
@@ -137,7 +123,6 @@ pub fn lottery_and_pos_and_pledge() {
                     }
                 }
                 // 处理 pos 逻辑，奖励为区块奖励的50%
-                // s.distribute_pos_rewards();
                 s.distribute_vip_pos_rewards();
 
                 // 处理 pledge 逻辑，区块奖励的37.5%平均分配给质押用户
@@ -161,7 +146,7 @@ pub fn lottery_and_pos_and_pledge() {
         let _ = satslink_token_can.icrc1_transfer(TransferArg {
             to: Account{
                 owner: this_canister_id, 
-                subaccount: Some(SATSLINKER_SPIKE_SUBACCOUNT)
+                subaccount: Some(SATSLINKER_LOTTERY_SUBACCOUNT)
             },
             amount: Nat(temp_satslink_token_lottery.val),
             from_subaccount: None,
@@ -239,18 +224,18 @@ fn redistribute_icps() {
 
             // if more than 1 ICP is collected
             if balance_e8s > one_e8s {
-                let qty_to_furnace = balance_e8s * REDISTRIBUTION_FURNACE_SHARE_E8S / one_e8s; //60%
-                let qty_to_spike = balance_e8s * REDISTRIBUTION_SPIKE_SHARE_E8S / one_e8s;     //10%
+                let qty_to_swappool = balance_e8s * REDISTRIBUTION_SWAPPOOL_SHARE_E8S / one_e8s; //60%
+                let qty_to_lottery = balance_e8s * REDISTRIBUTION_LOTTERY_SHARE_E8S / one_e8s;     //10%
                 let qty_to_dev = balance_e8s * REDISTRIBUTION_DEV_SHARE_E8S / one_e8s;         //30%
 
-                // send half to the Furnace (Bonfire) canister
-                let furnace_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount([0u8; 32]));
+                // send half to the swap (pool) canister
+                let swappool_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SWAPPOOL_FEE_SUBACCOUNT));
                 let _ = ic_ledger_types::transfer(
                     ENV_VARS.icp_token_canister_id,
                     TransferArgs {
                         from_subaccount: Some(redistribution_subaccount),
-                        to: furnace_account_id,
-                        amount: Tokens::from_e8s(qty_to_furnace - ICP_FEE),
+                        to: swappool_account_id,
+                        amount: Tokens::from_e8s(qty_to_swappool - ICP_FEE),
                         memo: Memo(1),
                         fee: Tokens::from_e8s(ICP_FEE),
                         created_at_time: None,
@@ -259,13 +244,13 @@ fn redistribute_icps() {
                 .await;
 
                 // send another half to a special subaccount of this canister, that will eventually satslink them
-                let spike_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SPIKE_SUBACCOUNT));
+                let lottery_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_LOTTERY_SUBACCOUNT));
                 let _ = ic_ledger_types::transfer(
                     ENV_VARS.icp_token_canister_id,
                     TransferArgs {
                         from_subaccount: Some(redistribution_subaccount),
-                        to: spike_account_id,
-                        amount: Tokens::from_e8s(qty_to_spike - ICP_FEE),
+                        to: lottery_account_id,
+                        amount: Tokens::from_e8s(qty_to_lottery - ICP_FEE),
                         memo: Memo(1),
                         fee: Tokens::from_e8s(ICP_FEE),
                         created_at_time: None,
@@ -315,100 +300,68 @@ pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<()
         .map(|_| ())
 }
 
-pub fn play_lottery(qty: u64, to: Principal) {
-    //#3 实现lottery游戏，游戏池子为块奖励的10%
-    spawn(async {
-        
-        // let this_canister_id = id();
-        // //#3 实现lottery游戏，游戏池子为块奖励的10%
-        // let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
+pub fn lottery_running(qty: u64, to: Principal) {
+    spawn(async move { // 使用 move 关键字以获取 qty 和 to 的所有权
+        let this_canister_id = id();
+        //#3 实现lottery游戏，游戏池子为块奖励的10%
+        let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
 
-        // // 发送 token 到指定账户
-        // let _ = satslink_token_can.icrc1_transfer(TransferArg {
-        //     to: Account {
-        //         owner: this_canister_id,
-        //         subaccount: Some(SATSLINKER_SPIKE_SUBACCOUNT),
-        //     },
-        //     amount: Nat(qty.into()),
-        //     from_subaccount: None,
-        //     fee: None,
-        //     created_at_time: None,
-        //     memo: None,
-        // })
-        // .await
-        // .map_err(|e| format!("{:?}", e))
-        // .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
-
-        // // 获取当前交易哈希
-        // let transaction_hash = ic_cdk::api::call::arg_data_raw(); // 假设这个函数可以获取当前交易的哈希
-        // let last_digit_qty = qty % 10; 
-
-        // // 从交易哈希的尾部开始查找数字字符
-        // let mut last_digit_hash = None;
-        // for c in transaction_hash.to_string().chars().rev() {
-        //     if c.is_digit(10) {
-        //         last_digit_hash = Some(c.to_digit(10).unwrap());
-        //         break; // 找到数字后退出循环
-        //     }
-        // }
-
-        // // 判断尾数是否相同（都是单数或都是双数）
-        // if let Some(last_digit) = last_digit_hash {
-        //     if (last_digit_qty % 2 == last_digit % 2) {
-        //         // 转双倍给 caller
-        //         let double_amount = qty * 2;
-        //         // 发送双倍金额给 caller
-        //         let _ = satslink_token_can.icrc1_transfer(TransferArg {
-        //             to: Account {
-        //                 owner: to,
-        //                 subaccount: None,
-        //             },
-        //             amount: Nat(double_amount.into()),
-        //             from_subaccount: None,
-        //             fee: None,
-        //             created_at_time: None,
-        //             memo: None,
-        //         })
-        //         .await
-        //         .map_err(|e| format!("{:?}", e))
-        //         .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
-        //     }
-        // } else {
-        //     // 如果没有找到数字，记录日志或采取其他措施
-        //     // 例如：log("No digit found in transaction hash");
-        // }       
-    });
-}
-
-
-pub async fn deposit_cycles(qty_e8s_u64: u64) -> CallResult<(Result<Nat, NotifyTopUpError>,)> {
-    let caller_subaccount = subaccount_of(caller());
-    let canister_id = id();
-    let subaccount = Subaccount::from(canister_id);
-
-    let transfer_args = TransferArgs {
-        amount: Tokens::from_e8s(qty_e8s_u64),
-        to: AccountIdentifier::new(&ENV_VARS.cycles_minting_canister_id, &subaccount),
-        // to: AccountIdentifier::new(&cmc_can_id, &subaccount),
-        memo: Memo(MEMO_TOP_UP_CANISTER),
-        fee: Tokens::from_e8s(ICP_FEE),
-        from_subaccount: Some(caller_subaccount),
-        created_at_time: None,
-    };
-
-    let block_index = transfer(ENV_VARS.icp_token_canister_id, transfer_args)
+        // 发送 token 到指定账户
+        let _ = satslink_token_can.icrc1_transfer(TransferArg {
+            to: Account {
+                owner: this_canister_id,
+                subaccount: Some(SATSLINKER_LOTTERY_SUBACCOUNT),
+            },
+            amount: Nat(qty.into()),
+            from_subaccount: None,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+        })
         .await
-        .expect("Unable to call ICP canister")
-        .expect("Unable to transfer ICP");
+        .map_err(|e| format!("{:?}", e))
+        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
 
-    // let cmc = CMCClient(cmc_can_id);
-    let cmc = CMCClient(ENV_VARS.cycles_minting_canister_id);
-    let notify_args = NotifyTopUpRequest {
-        block_index,
-        canister_id,
-    };
+        // 获取当前交易哈希
+        let (rand,) = raw_rand().await.expect("Unable to fetch rand");
+        let last_digit_qty = qty % 10; 
 
-    cmc.notify_top_up(notify_args).await
+        // 从交易哈希的尾部开始查找数字字符
+        let mut last_digit_hash = None;
+        for c in rand.to_vec().iter().rev() { // 修改为使用 to_vec() 并迭代字节
+            if c.is_ascii_digit() { // 使用 is_ascii_digit() 检查字符
+                last_digit_hash = Some(c - b'0'); // 将字节转换为数字
+                break; // 找到数字后退出循环
+            }
+        }
+
+        // 判断尾数是否都是单数或都是双数
+        if let Some(last_digit) = last_digit_hash {
+            // 将 last_digit 转换为 u64 以便与 last_digit_qty 比较
+            if last_digit_qty % 2 == last_digit as u64 % 2 { // 将 last_digit 转换为 u64
+                // 转双倍给 caller
+                let double_amount = qty * 2;
+                // 发送双倍金额给 caller
+                let _ = satslink_token_can.icrc1_transfer(TransferArg {
+                    to: Account {
+                        owner: to,
+                        subaccount: None,
+                    },
+                    amount: Nat(double_amount.into()),
+                    from_subaccount: None,
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                })
+                .await
+                .map_err(|e| format!("{:?}", e))
+                .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
+            }
+        } else {
+            // 如果没有找到数字，记录日志或采取其他措施
+            // 例如：log("No digit found in transaction hash");
+        }       
+    });
 }
 
 thread_local! {

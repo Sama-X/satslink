@@ -33,6 +33,8 @@ use shared::{
             RefundLostTokensResponse, 
             StakeRequest, 
             StakeResponse,
+            LotteryRequest,
+            LotteryResponse,
             PledgeRequest, 
             PledgeResponse, 
             RedeemRequest,
@@ -45,6 +47,7 @@ use shared::{
     icrc1::ICRC1CanisterClient,
     ENV_VARS,
     MIN_ICP_STAKE_E8S_U64,
+    MIN_STL_LOTTERY_E8S_U64,
     ONE_MINUTE_NS,
     ONE_MONTH_NS,
 };
@@ -52,7 +55,7 @@ use shared::{
 use utils::{
     assert_caller_is_dev, 
     assert_running, 
-    play_lottery,
+    lottery_running,
     set_init_seed_one_timer,
     set_cycles_icp_exchange_rate_timer,
     set_icp_redistribution_timer,
@@ -110,29 +113,38 @@ async fn stake(req: StakeRequest) -> StakeResponse {
 
     STATE.with_borrow_mut(|s| {
         let info = s.get_info();
-        if !req.enable_lottery {
-            let cycles_rate = info.get_icp_to_cycles_exchange_rate();
+        let cycles_rate = info.get_icp_to_cycles_exchange_rate();
 
-            let shares_minted = staked_icps_e12s * cycles_rate;
+        let shares_minted = staked_icps_e12s * cycles_rate;
 
-            let time_in_minutes = shares_minted.val.bits() / 10_000_u64; // 每 10,000 cycles 换得 1 分钟
-            let tmps = time_in_minutes * ONE_MINUTE_NS; // 将分钟转换为纳秒
+        let time_in_minutes = shares_minted.val.bits() / 10_000_u64; // 每 10,000 cycles 换得 1 分钟
+        let tmps = time_in_minutes * ONE_MINUTE_NS; // 将分钟转换为纳秒
 
-            let current_time = time(); // 获取当前时间
-            let expiration_time = current_time + tmps; // 计算到期时间
+        let current_time = time(); // 获取当前时间
+        let expiration_time = current_time + tmps; // 计算到期时间
 
-            s.mint_vip_share(expiration_time, caller());
-            //s.mint_icp_share(shares_minted.clone(), caller());
-        }else{
-            play_lottery(req.qty_e8s_u64, caller());
-        }
+        s.mint_vip_share(expiration_time, caller());
     });
 
     StakeResponse {}
 }
 
 #[update]
-async fn pledge(req: PledgeRequest) -> PledgeResponse { // 返回类型保持为 PledgeResponse
+async fn play_lottery(req: LotteryRequest) -> LotteryResponse {
+    // 实现异步逻辑
+    assert_running();
+
+    if req.qty_e8s_u64 < MIN_STL_LOTTERY_E8S_U64 {
+        panic!("At least 1 STL is required to participate");
+    }
+    
+    lottery_running(req.qty_e8s_u64, caller());
+
+    LotteryResponse {}
+}
+
+#[update]
+async fn pledge(req: PledgeRequest) -> PledgeResponse { 
     assert_running();
 
     let caller_id = caller();
@@ -145,7 +157,6 @@ async fn pledge(req: PledgeRequest) -> PledgeResponse { // 返回类型保持为
         s.pledge_shares.get(&caller_id).clone().unwrap_or((TCycles::zero(), 0u64, E8s::zero()))
     });
 
-    // 创建代币转移客户端（这个应该在函数外部创建并复用）
     let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
 
     // 转账 SATSLINK 代币到发行账号
@@ -196,7 +207,7 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
     //let info = STATE.with_borrow_mut(|s| s.get_info());
 
     // 检查用户是否有质押记录
-    let (cur_satslink_share, pledge_satslink_time, cur_reward) = STATE.with_borrow_mut(|s| {
+    let (cur_satslink_share, pledge_satslink_time, _) = STATE.with_borrow_mut(|s| {
         s.pledge_shares.get(&caller_id).clone().unwrap_or((TCycles::zero(), 0u64, E8s::zero()))
     });
 
@@ -244,52 +255,6 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
             return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // 修复：返回响应
         }
     }
-}
-
-
-#[update]
-async fn claim_reward(req: ClaimRewardRequest) -> ClaimRewardResponse {
-    assert_running();
-
-    let c = caller();
-
-    let result = if let Some(unclaimed) = STATE.with_borrow_mut(|s| s.claim_reward(c)) {
-        let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
-
-        let res = satslink_token_can
-            .icrc1_transfer(TransferArg {
-                to: Account {
-                    owner: req.to,
-                    subaccount: None,
-                },
-                amount: Nat(unclaimed.clone().val),
-                from_subaccount: None,
-                fee: None,
-                created_at_time: None,
-                memo: None,
-            })
-            .await
-            .map_err(|e| format!("{:?}", e))
-            .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
-
-        match res {
-            Ok(r) => match r {
-                Ok(idx) => Ok(idx),
-                Err(e) => {
-                    STATE.with_borrow_mut(|s| s.revert_claim_reward(c, unclaimed));
-                    Err(e)
-                }
-            },
-            Err(e) => {
-                STATE.with_borrow_mut(|s| s.revert_claim_reward(c, unclaimed));
-                Err(e)
-            }
-        }
-    } else {
-        Err(format!("Not unclaimed reward found!"))
-    };
-
-    ClaimRewardResponse { result }
 }
 
 
@@ -415,7 +380,9 @@ fn disable_lottery() {
 
 #[query]
 fn can_migrate_msq_account() -> bool {
-    STATE.with_borrow(|s| s.get_info().can_migrate(&caller()))
+    STATE.with_borrow(|s| 
+        s.get_info().can_vip_migrate(&caller()) && s.get_info().can_pledge_migrate(&caller())
+    )
 }
 
 #[query]

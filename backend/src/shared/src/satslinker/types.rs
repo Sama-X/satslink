@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use candid::{CandidType, Principal};
 use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{memory_manager::VirtualMemory, DefaultMemoryImpl};
-use num_bigint::BigUint;
 use serde::Deserialize;
 use sha2::Digest;
 
@@ -22,15 +21,12 @@ pub const POS_ACCOUNTS_PER_BATCH: u64 = 300;
 pub const UPDATE_SEED_DOMAIN: &[u8] = b"msq-satslink-update-seed";
 
 pub const SATSLINKER_REDISTRIBUTION_SUBACCOUNT: [u8; 32] = [0u8; 32];
-pub const SATSLINKER_SPIKE_SUBACCOUNT: [u8; 32] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-];
-pub const SATSLINKER_DEV_FEE_SUBACCOUNT: [u8; 32] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
-];
+pub const SATSLINKER_LOTTERY_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,];
+pub const SATSLINKER_DEV_FEE_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,];
+pub const SATSLINKER_SWAPPOOL_FEE_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,];
 
-pub const REDISTRIBUTION_SPIKE_SHARE_E8S: u64 = 1000_0000;    // 10%
-pub const REDISTRIBUTION_FURNACE_SHARE_E8S: u64 = 6000_0000;  // 60%
+pub const REDISTRIBUTION_LOTTERY_SHARE_E8S: u64 = 1000_0000;    // 10%
+pub const REDISTRIBUTION_SWAPPOOL_SHARE_E8S: u64 = 6000_0000;  // 60%
 pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 3000_0000;      // 30%
 
 pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 2;                  // 每两分钟出一个1块
@@ -42,16 +38,15 @@ pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个�
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]
 pub struct SatslinkerStateInfo {
     pub total_pledge_shares_supply: TCycles, // 当前所有用户质押的 SATSLINK 代币总额
-    pub total_icp_shares_supply: TCycles,
     pub total_satslink_token_lottery: E8s,
     pub total_satslink_token_dev: E8s,
     pub total_satslink_token_minted: E8s,
     pub current_satslink_token_reward: E8s,
-    pub next_satslinker_id: Option<Principal>,
+
     pub seed: Vec<u8>,
-    pub current_pos_round: u64,
     pub lottery_enabled: Option<bool>,
-    pub tmp_can_migrate: Option<BTreeSet<Principal>>,
+    pub tmp_can_vip_migrate: Option<BTreeSet<Principal>>,
+    pub tmp_can_pledge_migrate: Option<BTreeSet<Principal>>,
     pub icp_to_cycles_exchange_rate: Option<TCycles>,
 }
 
@@ -85,25 +80,6 @@ impl SatslinkerStateInfo {
 
     pub fn disable_lottery(&mut self) {
         self.lottery_enabled = Some(false);
-    }
-
-    pub fn complete_round(&mut self) {
-        self.current_pos_round += 1;
-        self.next_satslinker_id = None;
-        self.update_seed();
-
-        // each 5040 blocks we half the reward, until it reaches 0.0014 SATSLINK per block
-        if (self.current_pos_round % POS_ROUNDS_PER_HALVING) == 0 {
-            let end_reward = E8s::from(POS_ROUND_END_REWARD_E8S);
-
-            if self.current_satslink_token_reward > end_reward {
-                self.current_satslink_token_reward.val /= BigUint::from(2u64);
-
-                if self.current_satslink_token_reward < end_reward {
-                    self.current_satslink_token_reward = end_reward;
-                }
-            }
-        }
     }
 
     pub fn current_winning_idx(&self, total_options: u64) -> u64 {
@@ -145,15 +121,28 @@ impl SatslinkerStateInfo {
     //     return self.total_satslink_token_dev.clone();
     // }
 
-    pub fn can_migrate(&self, caller: &Principal) -> bool {
-        self.tmp_can_migrate
+    pub fn can_vip_migrate(&self, caller: &Principal) -> bool {
+        self.tmp_can_vip_migrate
             .as_ref()
             .map(|it| it.contains(caller))
             .unwrap_or_default()
     }
 
-    pub fn note_migrated(&mut self, caller: &Principal) {
-        if let Some(can_migrate) = &mut self.tmp_can_migrate {
+    pub fn note_vip_migrated(&mut self, caller: &Principal) {
+        if let Some(can_migrate) = &mut self.tmp_can_vip_migrate {
+            can_migrate.remove(caller);
+        }
+    }
+
+    pub fn can_pledge_migrate(&self, caller: &Principal) -> bool {
+        self.tmp_can_pledge_migrate
+            .as_ref()
+            .map(|it| it.contains(caller))
+            .unwrap_or_default()
+    }
+
+    pub fn note_pledge_migrated(&mut self, caller: &Principal) {
+        if let Some(can_migrate) = &mut self.tmp_can_pledge_migrate {
             can_migrate.remove(caller);
         }
     }
