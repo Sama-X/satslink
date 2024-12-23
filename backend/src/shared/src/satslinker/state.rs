@@ -124,7 +124,7 @@ impl SatslinkerState {
                 // 如果有未领取的奖励
                 if unclaimed_reward > E8s::zero() {
                     let mut info = self.get_info();
-                    info.total_satslink_token_minted += &unclaimed_reward;
+                    info.total_token_minted += &unclaimed_reward;
                     self.set_info(info);
 
                     // 移除用户并返回未领取的奖励
@@ -148,7 +148,7 @@ impl SatslinkerState {
 
     pub fn revert_claim_vip_reward(&mut self, caller: Principal, unclaimed_reward: E8s) {
         let mut info = self.get_info();
-        info.total_satslink_token_minted -= &unclaimed_reward;
+        info.total_token_minted -= &unclaimed_reward;
         self.set_info(info);
 
         // 仅在用户不在参与者列表中时插入
@@ -187,7 +187,7 @@ impl SatslinkerState {
         // Update the user's SATSLINK shares
         self.pledge_shares.insert(to, (satslink_share, pledge_satslink_time, unclaimed_reward));
         // 更新SatslinkerStateInfo中的总质押SATSLINK金额
-        info.total_pledge_shares_supply += satslink_amount;// 调整总质押SATSLINK
+        info.total_pledge_token_supply += satslink_amount;// 调整总质押SATSLINK
         self.set_info(info); // 更新状态信息
     }
 
@@ -198,7 +198,7 @@ impl SatslinkerState {
             
             if satslink_share < fee {
                 let mut info = self.get_info();
-                info.total_pledge_shares_supply -= &satslink_share;
+                info.total_pledge_token_supply -= &satslink_share;
                 self.set_info(info);
                 self.pledge_shares.remove(&caller);
                 if self.pledge_participants.contains_key(&caller) {
@@ -214,7 +214,7 @@ impl SatslinkerState {
                 let mut info = self.get_info();
     
                 // 更新状态信息
-                info.total_satslink_token_minted += &unclaimed_reward; // 增加已铸造的 SATSLINK 代币总数
+                info.total_token_minted += &unclaimed_reward; // 增加已铸造的 SATSLINK 代币总数
                 self.set_info(info); // 更新状态信息
 
                 // 返回用户的未领取奖励
@@ -226,7 +226,7 @@ impl SatslinkerState {
 
     pub fn revert_claim_pledge_reward(&mut self, caller: Principal, unclaimed_reward: E8s) {
         let mut info = self.get_info();
-        info.total_satslink_token_minted -= &unclaimed_reward;
+        info.total_token_minted -= &unclaimed_reward;
         self.set_info(info);
 
         if !self.pledge_participants.contains_key(&caller) {
@@ -252,14 +252,14 @@ impl SatslinkerState {
         let mut info = self.get_info();
 
         let mut cur_reward: ECs<8> = info
-            .current_satslink_token_reward
+            .current_token_reward
             .clone()
             .to_dynamic()
             .to_decimals(12)
             .to_const();
 
         cur_reward /= ECs::<8>::from(10u64); // 转换为整数形式，分配10%的块奖励
-        info.total_satslink_token_lottery += cur_reward
+        info.total_token_lottery += cur_reward
             .clone()
             .to_dynamic()
             .to_decimals(8)
@@ -277,7 +277,7 @@ impl SatslinkerState {
 
         let info = self.get_info();
         let mut cur_reward = info
-            .current_satslink_token_reward
+            .current_token_reward
             .clone()
             .to_dynamic()
             .to_decimals(12)
@@ -334,7 +334,7 @@ impl SatslinkerState {
         let info = self.get_info();
 
         let mut cur_reward = info
-            .current_satslink_token_reward
+            .current_token_reward
             .clone()
             .to_dynamic()
             .to_decimals(12)
@@ -353,7 +353,7 @@ impl SatslinkerState {
             // 检查质押时间是否到达
             if current_time >= pledge_expiration_time {
                 // Calculate the user's reward based on their share of the total staked amount
-                let new_reward = (&cur_reward * &share / &info.total_pledge_shares_supply)// 按照份额分配奖励
+                let new_reward = (&cur_reward * &share / &info.total_pledge_token_supply)// 按照份额分配奖励
                     .to_dynamic()
                     .to_decimals(8)
                     .to_const();
@@ -384,14 +384,14 @@ impl SatslinkerState {
         let mut info = self.get_info();
 
         let mut cur_reward = info
-            .current_satslink_token_reward
+            .current_token_reward
             .clone()
             .to_dynamic()
             .to_decimals(12)
             .to_const();
 
         cur_reward *= ECs::<12>::from(25u64) / ECs::<12>::from(1000u64); // 转换为整数形式，分配2.5%的块奖励
-        info.total_satslink_token_dev += cur_reward
+        info.total_token_dev += cur_reward
             .clone()
             .to_dynamic()
             .to_decimals(8)
@@ -430,7 +430,7 @@ impl SatslinkerState {
     pub fn get_totals(&self, caller: &Principal) -> GetTotalsResponse {
         let info = self.get_info();
         let fee = SatslinkerStateInfo::get_current_fee();
-        let is_lottery_enabled = info.is_lottery_enabled();
+        let is_satslink_enabled = info.is_satslink_enabled();
 
         let (share_1, unclaimed_reward_1) = self.vip_shares.get(caller).unwrap_or_default();
         let vip_status = self.vip_participants.contains_key(caller);
@@ -441,14 +441,14 @@ impl SatslinkerState {
         let icp_to_cycles_exchange_rate = info.get_icp_to_cycles_exchange_rate();
 
         GetTotalsResponse {
-            total_pledge_shares_supply: info.total_pledge_shares_supply,
-            total_satslink_token_lottery: info.total_satslink_token_lottery,
-            total_satslink_token_dev: info.total_satslink_token_dev,
-            total_satslink_token_minted: info.total_satslink_token_minted,
-            current_satslink_token_reward: info.current_satslink_token_reward,
+            total_pledge_token_supply: info.total_pledge_token_supply,
+            total_token_lottery: info.total_token_lottery,
+            total_token_dev: info.total_token_dev,
+            total_token_minted: info.total_token_minted,
 
+            current_token_reward: info.current_token_reward,
             current_share_fee: fee,
-            is_lottery_enabled,
+            is_satslink_enabled,
 
             total_pledge_participants: self.pledge_participants.len(),
             total_vip_participants: self.vip_participants.len(),

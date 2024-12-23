@@ -8,8 +8,6 @@ use super::types::TCycles;
 
 #[derive(CandidType, Deserialize)]
 pub struct GetSatslinkersRequest {
-    pub start: Option<Principal>,
-    pub take: u32,
 }
 
 #[derive(CandidType, Deserialize)]
@@ -19,13 +17,13 @@ pub struct GetSatslinkersResponse {
 
 #[derive(CandidType, Deserialize)]
 pub struct GetTotalsResponse {
-    pub total_pledge_shares_supply: TCycles,
-    pub total_satslink_token_lottery: E8s,
-    pub total_satslink_token_dev: E8s,
-    pub total_satslink_token_minted: E8s,
-    pub current_satslink_token_reward: E8s,
+    pub total_pledge_token_supply: TCycles,
+    pub total_token_lottery: E8s,
+    pub total_token_dev: E8s,
+    pub total_token_minted: E8s,
+    pub current_token_reward: E8s,
     pub current_share_fee: TCycles,
-    pub is_lottery_enabled: bool,
+    pub is_satslink_enabled: bool,
 
     pub total_pledge_participants: u64,
     pub total_vip_participants: u64,

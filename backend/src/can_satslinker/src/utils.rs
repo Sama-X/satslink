@@ -111,15 +111,15 @@ pub fn lottery_and_pos_and_pledge() {
 
         STATE.with_borrow_mut(|s| {
             let mut info = s.get_info();
-            let lottery_enabled = info.is_lottery_enabled();
-            if lottery_enabled{
+            let satslink_enabled = info.is_satslink_enabled();
+            if satslink_enabled{
                 // 处理 lottery 逻辑，返回是否完成： 奖励为区块链奖励的10%
                 if s.distribute_lottery_rewards(){
-                    if info.total_satslink_token_lottery > E8s::from(POS_ROUND_START_REWARD_E8S){
+                    if info.total_token_lottery > E8s::from(POS_ROUND_START_REWARD_E8S){
                         // 如果区块奖励大于等于POS_ROUND_START_REWARD_E8S，则转给抽奖池，然后清零
-                        temp_satslink_token_lottery = info.total_satslink_token_lottery;
-                        info.total_satslink_token_lottery = E8s::zero();
-                        info.total_satslink_token_minted += &temp_satslink_token_lottery;
+                        temp_satslink_token_lottery = info.total_token_lottery;
+                        info.total_token_lottery = E8s::zero();
+                        info.total_token_minted += &temp_satslink_token_lottery;
                     }
                 }
                 // 处理 pos 逻辑，奖励为区块奖励的50%
@@ -130,11 +130,11 @@ pub fn lottery_and_pos_and_pledge() {
 
                 // 处理 dev 逻辑，区块奖励的2.5%分配给开发者
                 if s.distribute_dev_rewards(){
-                    if info.total_satslink_token_dev > E8s::from(POS_ROUND_START_REWARD_E8S){
+                    if info.total_token_dev > E8s::from(POS_ROUND_START_REWARD_E8S){
                         // 如果开发者奖励大于等于POS_ROUND_START_REWARD_E8S，转开发者后则清零, 
-                        temp_satslink_token_dev = info.total_satslink_token_dev;
-                        info.total_satslink_token_dev = E8s::zero();
-                        info.total_satslink_token_minted += &temp_satslink_token_dev;
+                        temp_satslink_token_dev = info.total_token_dev;
+                        info.total_token_dev = E8s::zero();
+                        info.total_token_minted += &temp_satslink_token_dev;
                     }
                 }
             }

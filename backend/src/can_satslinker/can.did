@@ -1,25 +1,24 @@
 type ClaimRewardRequest = record { to : principal };
 type ClaimRewardResponse = record { result : Result };
-type GetSatslinkersRequest = record { take : nat32; start : opt principal };
 type GetSatslinkersResponse = record {
   entries : vec record { principal; nat; nat; bool };
 };
 type GetTotalsResponse = record {
-  total_pledge_shares_supply : nat;
-  current_satslink_token_reward : nat;
   your_pledge_eligibility_status : bool;
   total_vip_participants : nat64;
   your_vip_eligibility_status : bool;
   your_pledge_shares : nat;
-  total_satslink_token_dev : nat;
+  current_token_reward : nat;
+  total_token_minted : nat;
+  is_satslink_enabled : bool;
   your_vip_shares : nat64;
   icp_to_cycles_exchange_rate : nat;
   your_vip_unclaimed_reward_e8s : nat;
-  total_satslink_token_minted : nat;
+  total_pledge_token_supply : nat;
   your_pledge_unclaimed_reward_e8s : nat;
   total_pledge_participants : nat64;
-  total_satslink_token_lottery : nat;
-  is_lottery_enabled : bool;
+  total_token_dev : nat;
+  total_token_lottery : nat;
   current_share_fee : nat;
 };
 type LotteryRequest = record { qty_e8s_u64 : nat64 };
@@ -36,9 +35,9 @@ service : () -> {
   can_migrate_msq_account : () -> (bool) query;
   claim_pledge_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
   claim_vip_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
-  disable_lottery : () -> ();
-  enable_lottery : () -> ();
-  get_satslinkers : (GetSatslinkersRequest) -> (GetSatslinkersResponse) query;
+  disable_satslink : () -> ();
+  enable_satslink : () -> ();
+  get_satslinkers : (record {}) -> (GetSatslinkersResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
   migrate_msq_account : (ClaimRewardRequest) -> (record {});
   play_lottery : (LotteryRequest) -> (record {});

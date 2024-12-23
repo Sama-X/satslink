@@ -146,13 +146,13 @@ export function SatslinkerStore(props: IChildren) {
     const iTotals: ITotals = {
       totalSharesSupply: EDs.new(resp.total_icp_shares_supply, 12),
       totalTcyclesSatslinked: EDs.new(resp.total_tcycles_satslinked, 12),
-      totalSatslinkTokenMinted: E8s.new(resp.total_satslink_token_minted),
-      currentSatslinkTokenReward: E8s.new(resp.current_satslink_token_reward),
+      totalSatslinkTokenMinted: E8s.new(resp.total_token_minted),
+      currentSatslinkTokenReward: E8s.new(resp.current_token_reward),
       posStartKey: optUnwrap(resp.pos_start_key),
       posRoundDelayNs: resp.pos_round_delay_ns,
       currentPosRound: resp.current_pos_round,
       currentBlockShareFee: EDs.new(resp.current_share_fee, 12),
-      isLotteryEnabled: resp.is_lottery_enabled,
+      isLotteryEnabled: resp.is_satslink_enabled,
 
       totalSatslinkers: resp.total_satslinkers,
       totalLotteryParticipants: resp.total_lottery_participants,

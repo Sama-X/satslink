@@ -37,14 +37,14 @@ pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个�
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]
 pub struct SatslinkerStateInfo {
-    pub total_pledge_shares_supply: TCycles, // 当前所有用户质押的 SATSLINK 代币总额
-    pub total_satslink_token_lottery: E8s,
-    pub total_satslink_token_dev: E8s,
-    pub total_satslink_token_minted: E8s,
-    pub current_satslink_token_reward: E8s,
+    pub total_pledge_token_supply: TCycles, // 当前所有用户质押的 SATSLINK 代币总额
+    pub total_token_lottery: E8s,
+    pub total_token_dev: E8s,
+    pub total_token_minted: E8s,
+    pub current_token_reward: E8s,
 
     pub seed: Vec<u8>,
-    pub lottery_enabled: Option<bool>,
+    pub satslink_enabled: Option<bool>,
     pub tmp_can_vip_migrate: Option<BTreeSet<Principal>>,
     pub tmp_can_pledge_migrate: Option<BTreeSet<Principal>>,
     pub icp_to_cycles_exchange_rate: Option<TCycles>,
@@ -53,7 +53,7 @@ pub struct SatslinkerStateInfo {
 impl SatslinkerStateInfo {
     pub fn init(&mut self, seed: Vec<u8>) {
         self.seed = seed;
-        self.current_satslink_token_reward = E8s::from(POS_ROUND_START_REWARD_E8S);
+        self.current_token_reward = E8s::from(POS_ROUND_START_REWARD_E8S);
     }
 
     pub fn get_icp_to_cycles_exchange_rate(&self) -> TCycles {
@@ -70,16 +70,16 @@ impl SatslinkerStateInfo {
         self.icp_to_cycles_exchange_rate = Some(rate_tcycles);
     }
 
-    pub fn is_lottery_enabled(&self) -> bool {
-        self.lottery_enabled.unwrap_or_default()
+    pub fn is_satslink_enabled(&self) -> bool {
+        self.satslink_enabled.unwrap_or_default()
     }
 
-    pub fn enable_lottery(&mut self) {
-        self.lottery_enabled = Some(true);
+    pub fn enable_satslink(&mut self) {
+        self.satslink_enabled = Some(true);
     }
 
-    pub fn disable_lottery(&mut self) {
-        self.lottery_enabled = Some(false);
+    pub fn disable_satslink(&mut self) {
+        self.satslink_enabled = Some(false);
     }
 
     pub fn current_winning_idx(&self, total_options: u64) -> u64 {
@@ -98,27 +98,27 @@ impl SatslinkerStateInfo {
     }
 
     // pub fn note_pledged_satslink(&mut self, qty: E8s) {
-    //     self.total_pledge_shares_supply += qty;
+    //     self.total_pledge_token_supply += qty;
     // }
 
     // pub fn note_minted_reward(&mut self, qty: E8s) {
-    //     self.total_satslink_token_minted += qty;
+    //     self.total_token_minted += qty;
     // }
 
     // pub fn note_satslink_token_lottery(&mut self, qty: E8s) {
-    //     self.total_satslink_token_lottery += qty;
+    //     self.total_token_lottery += qty;
     // }
 
     // pub fn get_satslink_token_lottery(&mut self) ->E8s{
-    //     return self.total_satslink_token_lottery.clone();
+    //     return self.total_token_lottery.clone();
     // }
 
     // pub fn note_satslink_token_dev(&mut self, qty: E8s) {
-    //     self.total_satslink_token_dev += qty;
+    //     self.total_token_dev += qty;
     // }
 
     // pub fn get_satslink_token_dev(&mut self) ->E8s {
-    //     return self.total_satslink_token_dev.clone();
+    //     return self.total_token_dev.clone();
     // }
 
     pub fn can_vip_migrate(&self, caller: &Principal) -> bool {

@@ -243,7 +243,7 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
             Ok(_) => {
                 STATE.with_borrow_mut(|s| {
                     s.pledge_shares.remove(&caller_id);
-                    s.get_info().total_pledge_shares_supply -= &cur_satslink_share;
+                    s.get_info().total_pledge_token_supply -= &cur_satslink_share;
                 });
                 return RedeemResponse { result: Ok(Nat::from(cur_satslink_share.clone().val)) }; // 修复：使用 cur_satslink_share
             },
@@ -357,23 +357,23 @@ fn migrate_msq_account(req: MigrateMsqAccountRequest) -> MigrateMsqAccountRespon
 }
 
 #[update]
-fn enable_lottery() {
+fn enable_satslink() {
     assert_caller_is_dev();
 
     STATE.with_borrow_mut(|s| {
         let mut info = s.get_info();
-        info.enable_lottery();
+        info.enable_satslink();
         s.set_info(info);
     });
 }
 
 #[update]
-fn disable_lottery() {
+fn disable_satslink() {
     assert_caller_is_dev();
 
     STATE.with_borrow_mut(|s| {
         let mut info = s.get_info();
-        info.disable_lottery();
+        info.disable_satslink();
         s.set_info(info);
     });
 }
