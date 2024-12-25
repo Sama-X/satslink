@@ -33,6 +33,7 @@ impl SatslinkerState {
     pub fn init(&mut self, seed: Vec<u8>) {
         let mut info = self.get_info();
         info.init(seed);
+        info.enable_satslink();
         self.set_info(info);
     }
 
@@ -53,7 +54,6 @@ impl SatslinkerState {
         }
 
         self.set_info(info);
-
     }
 
     pub fn migrate_satslinker_account(&mut self, caller: &Principal, to: Principal,) -> Result<(), String> {
@@ -95,7 +95,7 @@ impl SatslinkerState {
     pub fn mint_vip_share(&mut self, tmps: TimestampNs, to: Principal) {
         // add new share to the account
         let cur_opt = self.vip_shares.get(&to);
-
+        println!("mint_vip_share shares: {:?}", tmps);
         let (share, unclaimed_reward) = if let Some((mut cur_share, cur_unclaimed_reward)) = cur_opt
         {
             cur_share += &tmps;
@@ -107,7 +107,9 @@ impl SatslinkerState {
         // 仅在用户不在参与者列表中时插入
         if !self.vip_participants.contains_key(&to) {
             self.vip_participants.insert(to, ());
+            println!("VIP Participants before insert: {:?}", self.vip_participants.pop_last());
         }
+        
         self.vip_shares.insert(to, (share, unclaimed_reward));
     }
 
@@ -445,6 +447,9 @@ impl SatslinkerState {
             total_token_lottery: info.total_token_lottery,
             total_token_dev: info.total_token_dev,
             total_token_minted: info.total_token_minted,
+
+            current_pos_round: info.current_pos_round,
+            pos_round_delay_ns: info.pos_round_delay_ns,
 
             current_token_reward: info.current_token_reward,
             current_share_fee: fee,

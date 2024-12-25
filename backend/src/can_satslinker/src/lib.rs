@@ -8,7 +8,8 @@ use ic_cdk::{
     init, 
     post_upgrade, 
     query, 
-    update
+    update,
+    id
 };
 
 use icrc_ledger_types::icrc1::{
@@ -74,8 +75,7 @@ async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
     let c = caller();
     let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
 
-    icp_can
-        .icrc1_transfer(TransferArg {
+    icp_can.icrc1_transfer(TransferArg {
             from_subaccount: Some(subaccount_of(c).0),
             to: Account {
                 owner: req.to,
@@ -117,16 +117,17 @@ async fn stake(req: StakeRequest) -> StakeResponse {
 
         let shares_minted = staked_icps_e12s * cycles_rate;
 
-        let time_in_minutes = shares_minted.val.bits() / 10_000_u64; // 每 10,000 cycles 换得 1 分钟
+        let time_in_minutes = shares_minted.val.bits() / 100_000_000u64; // 每 10,000 cycles 换得 1 分钟
         let tmps = time_in_minutes * ONE_MINUTE_NS; // 将分钟转换为纳秒
 
         let current_time = time(); // 获取当前时间
         let expiration_time = current_time + tmps; // 计算到期时间
 
-        s.mint_vip_share(expiration_time, caller());
+        s.mint_vip_share(expiration_time, caller()); 
+        //s.mint_vip_share(req.qty_e8s_u64, caller());
     });
 
-    StakeResponse {}
+    StakeResponse {result: Ok(Nat::from(req.qty_e8s_u64)), message: format!("{}|{}", caller(), id()),}
 }
 
 #[update]

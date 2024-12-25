@@ -25,6 +25,9 @@ pub struct GetTotalsResponse {
     pub current_share_fee: TCycles,
     pub is_satslink_enabled: bool,
 
+    pub current_pos_round: u64,
+    pub pos_round_delay_ns: u64,
+    
     pub total_pledge_participants: u64,
     pub total_vip_participants: u64,
     pub icp_to_cycles_exchange_rate: TCycles,
@@ -68,7 +71,10 @@ pub struct StakeRequest {
 }
 
 #[derive(CandidType, Deserialize)]
-pub struct StakeResponse {}
+pub struct StakeResponse {
+    pub result: Result<Nat, String>,
+    pub message: String, // 新增字段，用于返回字符串信息
+}
 
 #[derive(CandidType, Deserialize)]
 pub struct LotteryRequest {

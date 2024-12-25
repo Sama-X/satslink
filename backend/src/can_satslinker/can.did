@@ -10,6 +10,7 @@ type GetTotalsResponse = record {
   your_pledge_shares : nat;
   current_token_reward : nat;
   total_token_minted : nat;
+  pos_round_delay_ns : nat64;
   is_satslink_enabled : bool;
   your_vip_shares : nat64;
   icp_to_cycles_exchange_rate : nat;
@@ -19,6 +20,7 @@ type GetTotalsResponse = record {
   total_pledge_participants : nat64;
   total_token_dev : nat;
   total_token_lottery : nat;
+  current_pos_round : nat64;
   current_share_fee : nat;
 };
 type LotteryRequest = record { qty_e8s_u64 : nat64 };
@@ -30,6 +32,7 @@ type RefundLostTokensResponse = record { results : vec Result };
 type RefundTokenKind = variant { ICP : vec record { blob; nat64 } };
 type Result = variant { Ok : nat; Err : text };
 type StakeRequest = record { qty_e8s_u64 : nat64 };
+type StakeResponse = record { result : Result; message : text };
 type WithdrawRequest = record { to : principal; qty_e8s : nat };
 service : () -> {
   can_migrate_msq_account : () -> (bool) query;
@@ -46,7 +49,7 @@ service : () -> {
   redeem : (RedeemRequest) -> (RedeemResponse);
   refund_lost_tokens : (RefundLostTokensRequest) -> (RefundLostTokensResponse);
   resume : () -> ();
-  stake : (StakeRequest) -> (record {});
+  stake : (StakeRequest) -> (StakeResponse);
   stop : () -> ();
   subaccount_of : (principal) -> (blob) query;
   withdraw : (WithdrawRequest) -> (record {});

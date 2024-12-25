@@ -2,7 +2,7 @@ use std::{cell::RefCell, time::Duration};
 
 use candid::{Nat, Principal};
 use ic_cdk::{
-    api::management_canister::main::raw_rand, caller, id, spawn, print, println
+    api::management_canister::main::raw_rand, caller, id, spawn
 };
 use ic_e8s::c::E8s;
 use ic_cdk_timers::set_timer;
@@ -133,6 +133,7 @@ pub fn lottery_and_pos_and_pledge() {
                         info.total_token_minted += &temp_satslink_token_dev;
                     }
                 }
+                info.complete_round();
             }
             s.set_info(info);
         }); 
@@ -224,21 +225,7 @@ fn redistribute_icps() {
                 let qty_to_lottery = balance_e8s * REDISTRIBUTION_LOTTERY_SHARE_E8S / one_e8s;     //10%
                 let qty_to_dev = balance_e8s * REDISTRIBUTION_DEV_SHARE_E8S / one_e8s;         //30%
 
-                // send half to the swap (pool) canister
-                // let swappool_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SWAPPOOL_SUBACCOUNT));
-                // let _ = ic_ledger_types::transfer(
-                //     ENV_VARS.icp_token_canister_id,
-                //     TransferArgs {
-                //         from_subaccount: Some(redistribution_subaccount),
-                //         to: swappool_account_id,
-                //         amount: Tokens::from_e8s(qty_to_swappool - ICP_FEE),
-                //         memo: Memo(1),
-                //         fee: Tokens::from_e8s(ICP_FEE),
-                //         created_at_time: None,
-                //     },
-                // )
-                // .await;
-                
+                // send half to the swap (pool) canister            
                 let satslink_icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
                 let _ = satslink_icp_can.icrc1_transfer(TransferArg {
                     to: Account {
@@ -254,20 +241,6 @@ fn redistribute_icps() {
                 .await;
 
                 // send another half to a special subaccount of this canister, that will eventually satslink them
-                // let lottery_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_LOTTERY_SUBACCOUNT));
-                // let _ = ic_ledger_types::transfer(
-                //     ENV_VARS.icp_token_canister_id,
-                //     TransferArgs {
-                //         from_subaccount: Some(redistribution_subaccount),
-                //         to: lottery_account_id,
-                //         amount: Tokens::from_e8s(qty_to_lottery - ICP_FEE),
-                //         memo: Memo(1),
-                //         fee: Tokens::from_e8s(ICP_FEE),
-                //         created_at_time: None,
-                //     },
-                // )
-                // .await;
-
                 let _ = satslink_icp_can.icrc1_transfer(TransferArg {
                         to: Account {
                             owner: this_canister_id,
@@ -283,20 +256,6 @@ fn redistribute_icps() {
                     .map_err(|e| format!("{:?}", e));
 
                 // send a little bit to the subaccount, where the devs can withdraw them
-                // let dev_account_id = AccountIdentifier::new(&this_canister_id,&Subaccount(SATSLINKER_DEV_FEE_SUBACCOUNT));
-                // let _ = ic_ledger_types::transfer(
-                //     ENV_VARS.icp_token_canister_id,
-                //     TransferArgs {
-                //         from_subaccount: Some(redistribution_subaccount),
-                //         to: dev_account_id,
-                //         amount: Tokens::from_e8s(qty_to_dev - ICP_FEE),
-                //         memo: Memo(1),
-                //         fee: Tokens::from_e8s(ICP_FEE),
-                //         created_at_time: None,
-                //     },
-                // )
-                // .await;
-                
                 let _ = satslink_icp_can.icrc1_transfer(TransferArg {
                         to: Account {
                             owner: this_canister_id,
@@ -317,13 +276,10 @@ fn redistribute_icps() {
     });
 }
 
-pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<(), String> {
+pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<String, String> {
     let caller_subaccount = subaccount_of(caller());
-    print(caller().to_string());
     let canister_id = id();
-    print(canister_id.to_string());
-    print(qty_e8s_u64.to_string());
-    let redistribution_subaccount = Subaccount(SATSLINKER_REDISTRIBUTION_SUBACCOUNT);
+    //let redistribution_subaccount = Subaccount(SATSLINKER_REDISTRIBUTION_SUBACCOUNT);
 
     let satslink_icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
     let _ = satslink_icp_can.icrc1_transfer(TransferArg {
@@ -333,32 +289,16 @@ pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<()
             },
             amount: Nat::from(qty_e8s_u64),
             from_subaccount: Some(caller_subaccount.0),
-            fee: Some(Nat::from(ICP_FEE)),
+            fee: Some(Nat::from(qty_e8s_u64 - ICP_FEE)),
             created_at_time: None,
             memo: None,
         })
         .await
-        .map_err(|e| format!("{:?}", e))
-        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
+        .map_err(|e| format!("{:?}", e));
         
 
     // 返回 transfer_result 的结果
-    Ok(())
-
-    // let transfer_args = TransferArgs {
-    //     from_subaccount: Some(caller_subaccount),
-    //     to: AccountIdentifier::new(&canister_id, &redistribution_subaccount),
-    //     amount: Tokens::from_e8s(qty_e8s_u64),
-    //     memo: Memo(0),
-    //     fee: Tokens::from_e8s(ICP_FEE),
-    //     created_at_time: None,
-    // };
-
-    // transfer(ENV_VARS.icp_token_canister_id, transfer_args)
-    //     .await
-    //     .map_err(|(code, msg)| format!("{:?} {}", code, msg))?
-    //     .map_err(|e| format!("{}", e))
-    //     .map(|_| ())
+    Ok(format!("{}|{}|{}", caller(), canister_id, qty_e8s_u64))
 }
 
 pub fn lottery_running(qty: u64, to: Principal) {

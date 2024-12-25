@@ -5,6 +5,7 @@ use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{memory_manager::VirtualMemory, DefaultMemoryImpl};
 use serde::Deserialize;
 use sha2::Digest;
+use num_bigint::BigUint;
 
 // use crate
 use crate::{cmc::XdrData, ONE_MINUTE_NS};
@@ -48,6 +49,8 @@ pub struct SatslinkerStateInfo {
     pub total_token_dev: E8s,
     pub total_token_minted: E8s,
     pub current_token_reward: E8s,
+    pub current_pos_round: u64,
+    pub pos_round_delay_ns: u64,
 
     pub seed: Vec<u8>,
     pub satslink_enabled: Option<bool>,
@@ -60,6 +63,7 @@ impl SatslinkerStateInfo {
     pub fn init(&mut self, seed: Vec<u8>) {
         self.seed = seed;
         self.current_token_reward = E8s::from(POS_ROUND_START_REWARD_E8S);
+        self.pos_round_delay_ns = POS_ROUND_DELAY_NS;
     }
 
     pub fn get_icp_to_cycles_exchange_rate(&self) -> TCycles {
@@ -86,6 +90,25 @@ impl SatslinkerStateInfo {
 
     pub fn disable_satslink(&mut self) {
         self.satslink_enabled = Some(false);
+    }
+
+    pub fn complete_round(&mut self) {
+        self.current_pos_round += 1;
+        self.update_seed();
+
+        // each 5040 blocks we half the reward, until it reaches 0.0014 SATSLINK per block
+        if (self.current_pos_round % POS_ROUNDS_PER_HALVING) == 0 {
+            let end_reward = E8s::from(POS_ROUND_END_REWARD_E8S);
+
+            if self.current_token_reward > end_reward {
+                let new_reward = (self.current_token_reward.val.clone() * BigUint::from(3u64)) / BigUint::from(4u64); // 0.75
+                self.current_token_reward = E8s::from(new_reward.bits()); // 更新当前奖励
+
+                if self.current_token_reward < end_reward {
+                    self.current_token_reward = end_reward;
+                }
+            }
+        }
     }
 
     pub fn current_winning_idx(&self, total_options: u64) -> u64 {
