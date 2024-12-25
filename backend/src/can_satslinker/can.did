@@ -39,6 +39,7 @@ service : () -> {
   enable_satslink : () -> ();
   get_satslinkers : (record {}) -> (GetSatslinkersResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
+  icrc1_transfer : (ClaimRewardRequest) -> ();
   migrate_msq_account : (ClaimRewardRequest) -> (record {});
   play_lottery : (LotteryRequest) -> (record {});
   pledge : (PledgeRequest) -> (record {});

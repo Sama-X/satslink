@@ -7,7 +7,7 @@ use serde::Deserialize;
 use sha2::Digest;
 
 // use crate
-use crate::{cmc::XdrData, ONE_MINUTE_NS, ONE_HOUR_NS, ONE_MONTH_NS};
+use crate::{cmc::XdrData, ONE_MINUTE_NS};
 
 pub type TCycles = ECs<12>;
 pub type TimestampNs = u64;
@@ -29,10 +29,16 @@ pub const REDISTRIBUTION_LOTTERY_SHARE_E8S: u64 = 1000_0000;    // 10%
 pub const REDISTRIBUTION_SWAPPOOL_SHARE_E8S: u64 = 6000_0000;  // 60%
 pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 3000_0000;      // 30%
 
-pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 2;                  // 每两分钟出一个1块
-pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;   // 每10分钟更新一次ICP/Cycles费率
-pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;        // 每3个小时重新分配一次ICP
-pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个月质押周期
+// pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 2;                  // 每两分钟出一个1块
+// pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;   // 每10分钟更新一次ICP/Cycles费率
+// pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;        // 每3个小时重新分配一次ICP
+// pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个月质押周期
+
+//测试时间
+pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS / 10;                  // 每6秒出一个1块
+pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;   // 每1分钟更新一次ICP/Cycles费率
+pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;        // 每1个分钟重新分配一次ICP
+pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 10;                    // 10分钟质押周期
 
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]

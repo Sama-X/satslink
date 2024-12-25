@@ -1,12 +1,13 @@
 use candid::Principal;
 use ic_cdk::{api::call::CallResult, call};
-use ic_e8s::c::E8s;
 use candid::Nat;
 use icrc_ledger_types::{
     icrc1::account::Account,
     icrc1::transfer::{BlockIndex, TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
+//use ic_ledger_types::TransferResult;
+
 
 pub struct ICRC1CanisterClient {
     pub canister_id: Principal,
@@ -17,7 +18,7 @@ impl ICRC1CanisterClient {
         Self { canister_id }
     }
 
-    pub async fn icrc1_balance_of(&self, arg: Account) -> CallResult<(E8s,)> {
+    pub async fn icrc1_balance_of(&self, arg: Account) -> CallResult<(Nat,)> {
         call(self.canister_id, "icrc1_balance_of", (arg,)).await
     }
 

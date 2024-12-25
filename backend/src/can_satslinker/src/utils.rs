@@ -2,23 +2,19 @@ use std::{cell::RefCell, time::Duration};
 
 use candid::{Nat, Principal};
 use ic_cdk::{
-    api::management_canister::main::raw_rand,
-    caller, 
-    id, 
-    spawn,
+    api::management_canister::main::raw_rand, caller, id, spawn, print, println
 };
 use ic_e8s::c::E8s;
 use ic_cdk_timers::set_timer;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::{
+    transfer::TransferArg,
+    account::Account,
+};
+
 use ic_ledger_types::{
-    transfer, 
     AccountBalanceArgs, 
     AccountIdentifier, 
-    Memo, 
-    Subaccount, 
-    Tokens, 
-    TransferArgs,
+    Subaccount,
 };
 use ic_stable_structures::{
     memory_manager::{
@@ -229,49 +225,91 @@ fn redistribute_icps() {
                 let qty_to_dev = balance_e8s * REDISTRIBUTION_DEV_SHARE_E8S / one_e8s;         //30%
 
                 // send half to the swap (pool) canister
-                let swappool_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SWAPPOOL_SUBACCOUNT));
-                let _ = ic_ledger_types::transfer(
-                    ENV_VARS.icp_token_canister_id,
-                    TransferArgs {
-                        from_subaccount: Some(redistribution_subaccount),
-                        to: swappool_account_id,
-                        amount: Tokens::from_e8s(qty_to_swappool - ICP_FEE),
-                        memo: Memo(1),
-                        fee: Tokens::from_e8s(ICP_FEE),
-                        created_at_time: None,
+                // let swappool_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_SWAPPOOL_SUBACCOUNT));
+                // let _ = ic_ledger_types::transfer(
+                //     ENV_VARS.icp_token_canister_id,
+                //     TransferArgs {
+                //         from_subaccount: Some(redistribution_subaccount),
+                //         to: swappool_account_id,
+                //         amount: Tokens::from_e8s(qty_to_swappool - ICP_FEE),
+                //         memo: Memo(1),
+                //         fee: Tokens::from_e8s(ICP_FEE),
+                //         created_at_time: None,
+                //     },
+                // )
+                // .await;
+                
+                let satslink_icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
+                let _ = satslink_icp_can.icrc1_transfer(TransferArg {
+                    to: Account {
+                        owner: this_canister_id,
+                        subaccount: Some(SATSLINKER_SWAPPOOL_SUBACCOUNT),
                     },
-                )
+                    amount: Nat::from(qty_to_swappool - ICP_FEE),
+                    from_subaccount: Some(redistribution_subaccount.0),
+                    fee: Some(Nat::from(ICP_FEE)),
+                    created_at_time: None,
+                    memo: None,
+                })
                 .await;
 
                 // send another half to a special subaccount of this canister, that will eventually satslink them
-                let lottery_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_LOTTERY_SUBACCOUNT));
-                let _ = ic_ledger_types::transfer(
-                    ENV_VARS.icp_token_canister_id,
-                    TransferArgs {
-                        from_subaccount: Some(redistribution_subaccount),
-                        to: lottery_account_id,
-                        amount: Tokens::from_e8s(qty_to_lottery - ICP_FEE),
-                        memo: Memo(1),
-                        fee: Tokens::from_e8s(ICP_FEE),
+                // let lottery_account_id = AccountIdentifier::new(&this_canister_id, &Subaccount(SATSLINKER_LOTTERY_SUBACCOUNT));
+                // let _ = ic_ledger_types::transfer(
+                //     ENV_VARS.icp_token_canister_id,
+                //     TransferArgs {
+                //         from_subaccount: Some(redistribution_subaccount),
+                //         to: lottery_account_id,
+                //         amount: Tokens::from_e8s(qty_to_lottery - ICP_FEE),
+                //         memo: Memo(1),
+                //         fee: Tokens::from_e8s(ICP_FEE),
+                //         created_at_time: None,
+                //     },
+                // )
+                // .await;
+
+                let _ = satslink_icp_can.icrc1_transfer(TransferArg {
+                        to: Account {
+                            owner: this_canister_id,
+                            subaccount: Some(SATSLINKER_LOTTERY_SUBACCOUNT),
+                        },
+                        amount: Nat::from(qty_to_lottery - ICP_FEE),
+                        from_subaccount: Some(redistribution_subaccount.0),
+                        fee: Some(Nat::from(ICP_FEE)),
                         created_at_time: None,
-                    },
-                )
-                .await;
+                        memo: None,
+                    })
+                    .await
+                    .map_err(|e| format!("{:?}", e));
 
                 // send a little bit to the subaccount, where the devs can withdraw them
-                let dev_account_id = AccountIdentifier::new(&this_canister_id,&Subaccount(SATSLINKER_DEV_FEE_SUBACCOUNT));
-                let _ = ic_ledger_types::transfer(
-                    ENV_VARS.icp_token_canister_id,
-                    TransferArgs {
-                        from_subaccount: Some(redistribution_subaccount),
-                        to: dev_account_id,
-                        amount: Tokens::from_e8s(qty_to_dev - ICP_FEE),
-                        memo: Memo(1),
-                        fee: Tokens::from_e8s(ICP_FEE),
+                // let dev_account_id = AccountIdentifier::new(&this_canister_id,&Subaccount(SATSLINKER_DEV_FEE_SUBACCOUNT));
+                // let _ = ic_ledger_types::transfer(
+                //     ENV_VARS.icp_token_canister_id,
+                //     TransferArgs {
+                //         from_subaccount: Some(redistribution_subaccount),
+                //         to: dev_account_id,
+                //         amount: Tokens::from_e8s(qty_to_dev - ICP_FEE),
+                //         memo: Memo(1),
+                //         fee: Tokens::from_e8s(ICP_FEE),
+                //         created_at_time: None,
+                //     },
+                // )
+                // .await;
+                
+                let _ = satslink_icp_can.icrc1_transfer(TransferArg {
+                        to: Account {
+                            owner: this_canister_id,
+                            subaccount: Some(SATSLINKER_DEV_FEE_SUBACCOUNT),
+                        },
+                        amount: Nat::from(qty_to_dev - ICP_FEE),
+                        from_subaccount: Some(redistribution_subaccount.0),
+                        fee: Some(Nat::from(ICP_FEE)),
                         created_at_time: None,
-                    },
-                )
-                .await;
+                        memo: None,
+                    })
+                    .await
+                    .map_err(|e| format!("{:?}", e));
             }
         }
 
@@ -281,23 +319,46 @@ fn redistribute_icps() {
 
 pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<(), String> {
     let caller_subaccount = subaccount_of(caller());
+    print(caller().to_string());
     let canister_id = id();
+    print(canister_id.to_string());
+    print(qty_e8s_u64.to_string());
     let redistribution_subaccount = Subaccount(SATSLINKER_REDISTRIBUTION_SUBACCOUNT);
 
-    let transfer_args = TransferArgs {
-        from_subaccount: Some(caller_subaccount),
-        to: AccountIdentifier::new(&canister_id, &redistribution_subaccount),
-        amount: Tokens::from_e8s(qty_e8s_u64),
-        memo: Memo(0),
-        fee: Tokens::from_e8s(ICP_FEE),
-        created_at_time: None,
-    };
-
-    transfer(ENV_VARS.icp_token_canister_id, transfer_args)
+    let satslink_icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
+    let _ = satslink_icp_can.icrc1_transfer(TransferArg {
+            to: Account {
+                owner: canister_id,
+                subaccount: Some(SATSLINKER_REDISTRIBUTION_SUBACCOUNT),
+            },
+            amount: Nat::from(qty_e8s_u64),
+            from_subaccount: Some(caller_subaccount.0),
+            fee: Some(Nat::from(ICP_FEE)),
+            created_at_time: None,
+            memo: None,
+        })
         .await
-        .map_err(|(code, msg)| format!("{:?} {}", code, msg))?
-        .map_err(|e| format!("{}", e))
-        .map(|_| ())
+        .map_err(|e| format!("{:?}", e))
+        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
+        
+
+    // 返回 transfer_result 的结果
+    Ok(())
+
+    // let transfer_args = TransferArgs {
+    //     from_subaccount: Some(caller_subaccount),
+    //     to: AccountIdentifier::new(&canister_id, &redistribution_subaccount),
+    //     amount: Tokens::from_e8s(qty_e8s_u64),
+    //     memo: Memo(0),
+    //     fee: Tokens::from_e8s(ICP_FEE),
+    //     created_at_time: None,
+    // };
+
+    // transfer(ENV_VARS.icp_token_canister_id, transfer_args)
+    //     .await
+    //     .map_err(|(code, msg)| format!("{:?} {}", code, msg))?
+    //     .map_err(|e| format!("{}", e))
+    //     .map(|_| ())
 }
 
 pub fn lottery_running(qty: u64, to: Principal) {
