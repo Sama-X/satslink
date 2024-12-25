@@ -257,12 +257,33 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
     }
 }
 
+#[update]
+async fn icrc1_transfer(req: ClaimRewardRequest){
+    assert_running();
+    let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
+    let _ = satslink_token_can
+        .icrc1_transfer(TransferArg {
+            to: Account {
+                owner: req.to,
+                subaccount: None,
+            },
+            amount: Nat::from(300_000_000u64),
+            from_subaccount: None,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+        })
+        .await
+        .map_err(|e| format!("{:?}", e))
+        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
+}
+
 
 #[update]
 async fn claim_pledge_reward(req: ClaimRewardRequest) -> ClaimRewardResponse {
     assert_running();
    
-    let c = caller();
+    let c: Principal = caller();
 
     let result = if let Some(unclaimed) = STATE.with_borrow_mut(|s| s.claim_pledge_reward(c)) {
         let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);

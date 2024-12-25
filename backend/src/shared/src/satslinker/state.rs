@@ -432,10 +432,10 @@ impl SatslinkerState {
         let fee = SatslinkerStateInfo::get_current_fee();
         let is_satslink_enabled = info.is_satslink_enabled();
 
-        let (share_1, unclaimed_reward_1) = self.vip_shares.get(caller).unwrap_or_default();
+        let (share_1, unclaimed_reward_1) = self.vip_shares.get(caller).map(|(s, r)| (s.clone(), r.clone())).unwrap_or((0u64, ECs::zero()));
         let vip_status = self.vip_participants.contains_key(caller);
 
-        let (share_2, _, unclaimed_reward_2) = self.pledge_shares.get(caller).unwrap_or_default();
+        let (share_2, _, unclaimed_reward_2) = self.pledge_shares.get(caller).map(|(s, t, r)| (s.clone(), t, r.clone())).unwrap_or((ECs::zero(), 0u64, ECs::zero()));
         let pledge_status = self.pledge_participants.contains_key(caller);
         
         let icp_to_cycles_exchange_rate = info.get_icp_to_cycles_exchange_rate();

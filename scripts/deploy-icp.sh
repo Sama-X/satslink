@@ -1,0 +1,1 @@
+dfx nns install --ledger-accounts a477d8c9e392eee7524d169a107d0cd8b69d8978ad0c5d2c50254d07074860eb
