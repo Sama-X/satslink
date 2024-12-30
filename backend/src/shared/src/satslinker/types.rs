@@ -36,6 +36,7 @@ pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 3000_0000;      // 30%
 // pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个月质押周期
 
 //测试时间
+pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000; // VIP以分钟为单位
 pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS / 10;                  // 每6秒出一个1块
 pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;   // 每1分钟更新一次ICP/Cycles费率
 pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;        // 每1个分钟重新分配一次ICP
@@ -44,7 +45,7 @@ pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 10;                    //
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]
 pub struct SatslinkerStateInfo {
-    pub total_pledge_token_supply: TCycles, // 当前所有用户质押的 SATSLINK 代币总额
+    pub total_pledge_token_supply: E8s, // 当前所有用户质押的 SATSLINK 代币总额
     pub total_token_lottery: E8s,
     pub total_token_dev: E8s,
     pub total_token_minted: E8s,
@@ -102,7 +103,7 @@ impl SatslinkerStateInfo {
 
             if self.current_token_reward > end_reward {
                 let new_reward = (self.current_token_reward.val.clone() * BigUint::from(3u64)) / BigUint::from(4u64); // 0.75
-                self.current_token_reward = E8s::from(new_reward.bits()); // 更新当前奖励
+                self.current_token_reward = ECs::<8>::new(new_reward); // 更新当前奖励
 
                 if self.current_token_reward < end_reward {
                     self.current_token_reward = end_reward;

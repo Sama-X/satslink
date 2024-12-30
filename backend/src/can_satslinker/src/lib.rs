@@ -9,25 +9,25 @@ use ic_cdk::{
     post_upgrade, 
     query, 
     update,
-    id
+    println
 };
 
 use icrc_ledger_types::icrc1::{
     account::Account,
+    account::Subaccount,
     transfer::TransferArg,
 };
 
 use ic_e8s::c::E8s;
-use ic_ledger_types::Subaccount;
+//use ic_ledger_types::Subaccount;
 
 use shared::{
     satslinker::{
         api::{
             ClaimRewardRequest, 
             ClaimRewardResponse, 
-            GetSatslinkersRequest, 
-            GetSatslinkersResponse,
             GetTotalsResponse, 
+            GetSatslinkersResponse,
             MigrateMsqAccountRequest, 
             MigrateMsqAccountResponse,
             RefundLostTokensRequest, 
@@ -44,6 +44,7 @@ use shared::{
             WithdrawResponse
         },
             types::TCycles,
+            types::VIP_ROUND_DELAY_NS,
     },
     icrc1::ICRC1CanisterClient,
     ENV_VARS,
@@ -76,7 +77,7 @@ async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
     let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
 
     icp_can.icrc1_transfer(TransferArg {
-            from_subaccount: Some(subaccount_of(c).0),
+            from_subaccount: Some(subaccount_of(c)),
             to: Account {
                 owner: req.to,
                 subaccount: None,
@@ -102,7 +103,7 @@ async fn stake(req: StakeRequest) -> StakeResponse {
         panic!("At least 0.5 ICP is required to participate");
     }
 
-    stake_callers_icp_for_redistribution(req.qty_e8s_u64)
+    let stake_result = stake_callers_icp_for_redistribution(req.qty_e8s_u64)
         .await
         .expect("Unable to stake ICP");
 
@@ -112,22 +113,22 @@ async fn stake(req: StakeRequest) -> StakeResponse {
         .to_const::<12>();
 
     STATE.with_borrow_mut(|s| {
-        let info = s.get_info();
-        let cycles_rate = info.get_icp_to_cycles_exchange_rate();
+        let cycles_rate = s.get_info().get_icp_to_cycles_exchange_rate();
+        let cycles_share = staked_icps_e12s * cycles_rate;
+        let time_in_minutes = cycles_share.clone() / TCycles::from(1000u64); // 每 1,000 cycles 换得 1 分钟
+        // let expiration_time = time() + time_in_minutes.val.bits() * ONE_MINUTE_NS; // 计算到期时间,将分钟转换为纳秒
+        // println!("到期时间: {:?} 兑换成cycle: {:?}", expiration_time, cycles_share.val);
+        // s.mint_vip_share(expiration_time, caller()); 
 
-        let shares_minted = staked_icps_e12s * cycles_rate;
+        // 获取当前时间戳（以秒为单位）
+        let current_time = time() / VIP_ROUND_DELAY_NS;
+        let expiration_time = current_time + time_in_minutes.val.bits() * ONE_MINUTE_NS / VIP_ROUND_DELAY_NS; // 计算到期时间戳（以秒为单位）
 
-        let time_in_minutes = shares_minted.val.bits() / 100_000_000u64; // 每 10,000 cycles 换得 1 分钟
-        let tmps = time_in_minutes * ONE_MINUTE_NS; // 将分钟转换为纳秒
-
-        let current_time = time(); // 获取当前时间
-        let expiration_time = current_time + tmps; // 计算到期时间
-
-        s.mint_vip_share(expiration_time, caller()); 
-        //s.mint_vip_share(req.qty_e8s_u64, caller());
+         println!("到期时间: {:?} 兑换成cycle: {:?}", expiration_time, cycles_share.val);
+         s.mint_vip_share(expiration_time, caller()); 
     });
 
-    StakeResponse {result: Ok(Nat::from(req.qty_e8s_u64)), message: format!("{}|{}", caller(), id()),}
+    StakeResponse {result: Ok(Nat::from(req.qty_e8s_u64)), message: format!("{}", stake_result)}
 }
 
 #[update]
@@ -149,13 +150,10 @@ async fn pledge(req: PledgeRequest) -> PledgeResponse {
     assert_running();
 
     let caller_id = caller();
-    let satslink_amount = E8s::from(req.qty_e8s_u64)
-        .to_dynamic()
-        .to_decimals(12)
-        .to_const::<12>();
+    let satslink_amount = E8s::from(req.qty_e8s_u64);
 
     STATE.with_borrow_mut(|s| {
-        s.pledge_shares.get(&caller_id).clone().unwrap_or((TCycles::zero(), 0u64, E8s::zero()))
+        s.pledge_shares.get(&caller_id).clone().unwrap_or((E8s::zero(), 0u64, E8s::zero()))
     });
 
     let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
@@ -178,7 +176,7 @@ async fn pledge(req: PledgeRequest) -> PledgeResponse {
     // 处理转账结果
     match transfer_result {
         Ok((Ok(_),)) => { // 成功转账
-            let current_time = time(); // 获取当前时间
+            let current_time = time() / VIP_ROUND_DELAY_NS; // 获取当前时间
             // 更新质押记录
             STATE.with_borrow_mut(|s| {
                 s.mint_pledge_share(satslink_amount.clone(), current_time, caller_id); 
@@ -209,13 +207,13 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
 
     // 检查用户是否有质押记录
     let (cur_satslink_share, pledge_satslink_time, _) = STATE.with_borrow_mut(|s| {
-        s.pledge_shares.get(&caller_id).clone().unwrap_or((TCycles::zero(), 0u64, E8s::zero()))
+        s.pledge_shares.get(&caller_id).clone().unwrap_or((E8s::zero(), 0u64, E8s::zero()))
     });
 
     // 获取当前时间
-    let current_time = time(); 
+    let current_time = time() / VIP_ROUND_DELAY_NS; 
     // 检查质押时间是否到达
-    if current_time < pledge_satslink_time + ONE_MONTH_NS {
+    if current_time < (pledge_satslink_time + ONE_MONTH_NS) / VIP_ROUND_DELAY_NS {
         return RedeemResponse { result: Err(format!("Not release yet")) }; // 修复：返回响应
     }
 
@@ -408,8 +406,8 @@ fn can_migrate_msq_account() -> bool {
 }
 
 #[query]
-fn get_satslinkers(req: GetSatslinkersRequest) -> GetSatslinkersResponse {
-    STATE.with_borrow(|s| s.get_satslinkers(req))
+fn get_satslinkers() -> GetSatslinkersResponse {
+    STATE.with_borrow(|s| s.get_satslinkers())
 }
 
 #[query]
@@ -419,7 +417,8 @@ fn get_totals() -> GetTotalsResponse {
 
 #[query]
 fn subaccount_of(id: Principal) -> Subaccount {
-    Subaccount::from(id)
+    // Subaccount::from(id)
+    Account::from(id).subaccount.unwrap_or([0u8; 32])
 }
 
 #[init]

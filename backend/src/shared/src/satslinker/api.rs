@@ -7,17 +7,13 @@ use serde::Deserialize;
 use super::types::TCycles;
 
 #[derive(CandidType, Deserialize)]
-pub struct GetSatslinkersRequest {
-}
-
-#[derive(CandidType, Deserialize)]
 pub struct GetSatslinkersResponse {
-    pub entries: Vec<(Principal, TCycles, E8s, bool)>,
+    pub entries: Vec<(Principal, E8s, E8s, bool)>,
 }
 
 #[derive(CandidType, Deserialize)]
 pub struct GetTotalsResponse {
-    pub total_pledge_token_supply: TCycles,
+    pub total_pledge_token_supply: E8s,
     pub total_token_lottery: E8s,
     pub total_token_dev: E8s,
     pub total_token_minted: E8s,
@@ -35,7 +31,7 @@ pub struct GetTotalsResponse {
     pub your_vip_shares: u64,
     pub your_vip_unclaimed_reward_e8s: E8s,
     pub your_vip_eligibility_status: bool,
-    pub your_pledge_shares: TCycles,
+    pub your_pledge_shares: E8s,
     pub your_pledge_unclaimed_reward_e8s: E8s,
     pub your_pledge_eligibility_status: bool,
 }
