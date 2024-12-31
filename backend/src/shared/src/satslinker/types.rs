@@ -9,9 +9,9 @@ use num_bigint::BigUint;
 
 // use crate
 use crate::{cmc::XdrData, ONE_MINUTE_NS};
-
+pub type Address = [u8; 20];
+pub type Timestamp = u64;
 pub type TCycles = ECs<12>;
-pub type TimestampNs = u64;
 pub type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 pub const TCYCLE_POS_ROUND_BASE_FEE: u64 = 25_000_000_000_u64;
@@ -19,7 +19,7 @@ pub const POS_ROUND_START_REWARD_E8S: u64 = 1024_0000_0000_u64;
 pub const POS_ROUND_END_REWARD_E8S: u64 = 0_0014_0000_u64;
 pub const POS_ROUNDS_PER_HALVING: u64 = 5040;
 pub const POS_ACCOUNTS_PER_BATCH: u64 = 300;
-pub const UPDATE_SEED_DOMAIN: &[u8] = b"msq-satslink-update-seed";
+pub const UPDATE_SEED_DOMAIN: &[u8] = b"stl-satslink-update-seed";
 
 pub const SATSLINKER_REDISTRIBUTION_SUBACCOUNT: [u8; 32] = [0u8; 32];
 pub const SATSLINKER_LOTTERY_SUBACCOUNT: [u8; 32] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,];
@@ -30,6 +30,7 @@ pub const REDISTRIBUTION_LOTTERY_SHARE_E8S: u64 = 1000_0000;    // 10%
 pub const REDISTRIBUTION_SWAPPOOL_SHARE_E8S: u64 = 6000_0000;  // 60%
 pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 3000_0000;      // 30%
 
+// pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000; // VIP以分钟为单位
 // pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 2;                  // 每两分钟出一个1块
 // pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;   // 每10分钟更新一次ICP/Cycles费率
 // pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;        // 每3个小时重新分配一次ICP

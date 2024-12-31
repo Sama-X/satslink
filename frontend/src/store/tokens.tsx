@@ -147,7 +147,7 @@ export function TokensStore(props: IChildren) {
 
   const fetchMetadata: ITokensStoreContext["fetchMetadata"] = async (id) => {
     assertReadyToFetch();
-
+    
     const ledger = IcrcLedgerCanister.create({ agent: anonymousAgent()!, canisterId: id });
     const metadata = await ledger.metadata({ certified: false });
 

@@ -17,7 +17,6 @@ use icrc_ledger_types::icrc1::{
     account::Subaccount,
     transfer::TransferArg,
 };
-
 use ic_e8s::c::E8s;
 //use ic_ledger_types::Subaccount;
 
@@ -27,9 +26,9 @@ use shared::{
             ClaimRewardRequest, 
             ClaimRewardResponse, 
             GetTotalsResponse, 
-            GetSatslinkersResponse,
-            MigrateMsqAccountRequest, 
-            MigrateMsqAccountResponse,
+            GetVIPuserResponse,
+            MigrateAccountRequest, 
+            MigrateAccountResponse,
             RefundLostTokensRequest, 
             RefundLostTokensResponse, 
             StakeRequest, 
@@ -44,6 +43,7 @@ use shared::{
             WithdrawResponse
         },
             types::TCycles,
+            types::Address,
             types::VIP_ROUND_DELAY_NS,
     },
     icrc1::ICRC1CanisterClient,
@@ -116,16 +116,13 @@ async fn stake(req: StakeRequest) -> StakeResponse {
         let cycles_rate = s.get_info().get_icp_to_cycles_exchange_rate();
         let cycles_share = staked_icps_e12s * cycles_rate;
         let time_in_minutes = cycles_share.clone() / TCycles::from(1000u64); // 每 1,000 cycles 换得 1 分钟
-        // let expiration_time = time() + time_in_minutes.val.bits() * ONE_MINUTE_NS; // 计算到期时间,将分钟转换为纳秒
-        // println!("到期时间: {:?} 兑换成cycle: {:?}", expiration_time, cycles_share.val);
-        // s.mint_vip_share(expiration_time, caller()); 
 
         // 获取当前时间戳（以秒为单位）
         let current_time = time() / VIP_ROUND_DELAY_NS;
         let expiration_time = current_time + time_in_minutes.val.bits() * ONE_MINUTE_NS / VIP_ROUND_DELAY_NS; // 计算到期时间戳（以秒为单位）
 
          println!("到期时间: {:?} 兑换成cycle: {:?}", expiration_time, cycles_share.val);
-         s.mint_vip_share(expiration_time, caller()); 
+         s.mint_vip_share(expiration_time, caller(), req.address); 
     });
 
     StakeResponse {result: Ok(Nat::from(req.qty_e8s_u64)), message: format!("{}", stake_result)}
@@ -369,11 +366,11 @@ async fn claim_vip_reward(req: ClaimRewardRequest) -> ClaimRewardResponse {
 }
 
 #[update]
-fn migrate_msq_account(req: MigrateMsqAccountRequest) -> MigrateMsqAccountResponse {
+fn migrate_stl_account(req: MigrateAccountRequest) -> MigrateAccountResponse {
     STATE.with_borrow_mut(|s| s.migrate_satslinker_account(&caller(), req.to))
-        .expect("Unable to migrate MSQ account");
+        .expect("Unable to migrate SATSLINK account");
 
-    MigrateMsqAccountResponse {}
+    MigrateAccountResponse {}
 }
 
 #[update]
@@ -399,15 +396,15 @@ fn disable_satslink() {
 }
 
 #[query]
-fn can_migrate_msq_account() -> bool {
+fn can_migrate_stl_account() -> bool {
     STATE.with_borrow(|s| 
         s.get_info().can_vip_migrate(&caller()) && s.get_info().can_pledge_migrate(&caller())
     )
 }
 
 #[query]
-fn get_satslinkers() -> GetSatslinkersResponse {
-    STATE.with_borrow(|s| s.get_satslinkers())
+fn get_satslinkers(address: Address) -> GetVIPuserResponse {
+    STATE.with_borrow(|s| s.get_satslinkers(address))
 }
 
 #[query]

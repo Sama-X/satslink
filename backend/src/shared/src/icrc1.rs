@@ -5,7 +5,7 @@ use icrc_ledger_types::{
     icrc1::account::Account,
     icrc1::transfer::{BlockIndex, TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
-    icrc2::approve::{ApproveArgs, ApproveError},
+    icrc2::allowance::{AllowanceArgs, Allowance},
 };
 //use ic_ledger_types::TransferResult;
 
@@ -34,11 +34,11 @@ impl ICRC1CanisterClient {
         call(self.canister_id, "icrc1_transfer", (arg,)).await
     }
 
-    pub async fn icrc2_approve(
+    pub async fn icrc2_allowance(
         &self,
-        arg: ApproveArgs,
-    ) -> CallResult<(Result<BlockIndex, ApproveError>,)> {
-        call(self.canister_id, "icrc2_approve", (arg,)).await
+        arg: AllowanceArgs,
+    ) -> CallResult<(Option<Allowance>,)> {
+        call(self.canister_id, "icrc2_allowance", (arg,)).await
     }
 
     pub async fn icrc2_transfer_from(

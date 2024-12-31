@@ -3,12 +3,13 @@ use ic_e8s::c::E8s;
 use ic_ledger_types::AccountIdentifier;
 
 use serde::Deserialize;
-
 use super::types::TCycles;
+use super::types::Timestamp;
+use super::types::Address;
 
 #[derive(CandidType, Deserialize)]
-pub struct GetSatslinkersResponse {
-    pub entries: Vec<(Principal, E8s, E8s, bool)>,
+pub struct GetVIPuserResponse {
+    pub entry: Vec<(Principal, Address, Timestamp, E8s, bool)>,
 }
 
 #[derive(CandidType, Deserialize)]
@@ -64,6 +65,7 @@ pub struct ClaimRewardResponse {
 #[derive(CandidType, Deserialize)]
 pub struct StakeRequest {
     pub qty_e8s_u64: u64,
+    pub address: Address,
 }
 
 #[derive(CandidType, Deserialize)]
@@ -108,9 +110,9 @@ pub struct WithdrawRequest {
 pub struct WithdrawResponse {}
 
 #[derive(CandidType, Deserialize)]
-pub struct MigrateMsqAccountRequest {
+pub struct MigrateAccountRequest {
     pub to: Principal,
 }
 
 #[derive(CandidType, Deserialize)]
-pub struct MigrateMsqAccountResponse {}
+pub struct MigrateAccountResponse {}

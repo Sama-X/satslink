@@ -1,8 +1,5 @@
 type ClaimRewardRequest = record { to : principal };
 type ClaimRewardResponse = record { result : Result };
-type GetSatslinkersResponse = record {
-  entries : vec record { principal; nat; nat; bool };
-};
 type GetTotalsResponse = record {
   your_pledge_eligibility_status : bool;
   total_vip_participants : nat64;
@@ -23,6 +20,9 @@ type GetTotalsResponse = record {
   current_pos_round : nat64;
   current_share_fee : nat;
 };
+type GetVIPuserResponse = record {
+  entry : vec record { principal; blob; nat64; nat; bool };
+};
 type LotteryRequest = record { qty_e8s_u64 : nat64 };
 type PledgeRequest = record { qty_e8s_u64 : nat64 };
 type RedeemRequest = record { to : principal };
@@ -31,19 +31,19 @@ type RefundLostTokensRequest = record { kind : RefundTokenKind };
 type RefundLostTokensResponse = record { results : vec Result };
 type RefundTokenKind = variant { ICP : vec record { blob; nat64 } };
 type Result = variant { Ok : nat; Err : text };
-type StakeRequest = record { qty_e8s_u64 : nat64 };
+type StakeRequest = record { qty_e8s_u64 : nat64; address : blob };
 type StakeResponse = record { result : Result; message : text };
 type WithdrawRequest = record { to : principal; qty_e8s : nat };
 service : () -> {
-  can_migrate_msq_account : () -> (bool) query;
+  can_migrate_stl_account : () -> (bool) query;
   claim_pledge_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
   claim_vip_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
   disable_satslink : () -> ();
   enable_satslink : () -> ();
-  get_satslinkers : () -> (GetSatslinkersResponse) query;
+  get_satslinkers : (blob) -> (GetVIPuserResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
   icrc1_transfer : (ClaimRewardRequest) -> ();
-  migrate_msq_account : (ClaimRewardRequest) -> (record {});
+  migrate_stl_account : (ClaimRewardRequest) -> (record {});
   play_lottery : (LotteryRequest) -> (record {});
   pledge : (PledgeRequest) -> (record {});
   redeem : (RedeemRequest) -> (RedeemResponse);

@@ -1,22 +1,21 @@
 use std::collections::BTreeSet;
 use candid::{decode_one, encode_one, Principal};
-
 use ic_cdk::api::time;
-
 use ic_cdk::println;
 use ic_e8s::c::{E8s, ECs};
 use ic_stable_structures::{storable::Bound, Cell, StableBTreeMap, Storable};
 
 use super::{
     api::{
-        GetSatslinkersResponse, 
+        GetVIPuserResponse, 
         GetTotalsResponse
     },
     types::{
         SatslinkerStateInfo, 
         Memory, 
         TCycles, 
-        TimestampNs, 
+        Timestamp,
+        Address,
         TCYCLE_POS_ROUND_BASE_FEE,
         PLEDGE_ROUND_DELAY_NS,
         VIP_ROUND_DELAY_NS,
@@ -24,10 +23,10 @@ use super::{
 };
 
 pub struct SatslinkerState {
-    pub vip_shares: StableBTreeMap<Principal, (TimestampNs, E8s), Memory>,
-    pub pledge_shares: StableBTreeMap<Principal, (E8s, TimestampNs, E8s), Memory>, // 用户的质押 SATSLINK 代币份额和未领取的奖励
+    pub vip_shares: StableBTreeMap<Principal, (Address, Timestamp, E8s), Memory>,
+    pub pledge_shares: StableBTreeMap<Principal, (E8s, Timestamp, E8s), Memory>, // 用户的质押 SATSLINK 代币份额和未领取的奖励
     pub info: Cell<SatslinkerStateInfo, Memory>,
-    pub vip_participants: StableBTreeMap<Principal, (), Memory>,
+    //pub vip_participants: StableBTreeMap<Principal, (String, Timestamp), Memory>,
     pub pledge_participants: StableBTreeMap<Principal, (), Memory>,
 }
 
@@ -66,17 +65,14 @@ impl SatslinkerState {
         }
 
          // 处理 VIP 份额迁移
-         if let Some((share_1, reward_1)) = self.vip_shares.remove(caller) {
-            let (share_2, reward_2) = self.vip_shares
-                .get(&to)
-                .map(|(s, r)| (s.clone(), r.clone()))
-                .unwrap_or((0u64, E8s::zero()));
-            let (share, reward) = (share_1 + share_2, reward_1 + reward_2);
+         if let Some((address_1, share_1, reward_1)) = self.vip_shares.remove(caller) {
+            let (address, share, reward) = if let Some((address_2, share_2, reward_2)) = self.vip_shares.get(&to) {
+                (address_2.clone(), share_1 + share_2, reward_1 + reward_2)
+            } else {
+                (address_1, share_1, reward_1)
+            };
 
-            if &TCycles::from(share.clone()) > &SatslinkerStateInfo::get_current_fee() {
-                self.vip_participants.insert(to, ());
-            }
-            self.vip_shares.insert(to, (share.clone(), reward));
+            self.vip_shares.insert(to, (address, share, reward));
             info.note_vip_migrated(caller);
         } 
 
@@ -104,37 +100,32 @@ impl SatslinkerState {
 
     }
 
-    pub fn mint_vip_share(&mut self, tmps: TimestampNs, to: Principal) {
+    pub fn mint_vip_share(&mut self, tmps: Timestamp, to: Principal, address: Address) {
         // add new share to the account
         let cur_opt = self.vip_shares.get(&to);
         println!("mint vip share shares: {:?}", tmps);
-        let (share, unclaimed_reward) = if let Some((mut cur_share, cur_unclaimed_reward)) = cur_opt
-        {
+        
+        let (address, share, unclaimed_reward) = if let Some((cur_address, mut cur_share, cur_unclaimed_reward)) = cur_opt {
             cur_share += &tmps;
-            (cur_share, cur_unclaimed_reward)
+            (cur_address.clone(), cur_share, cur_unclaimed_reward.clone())
         } else {
-            (tmps.clone(), E8s::zero())
+            (address, tmps, E8s::zero())
         };
 
-        // 仅在用户不在参与者列表中时插入
-        if !self.vip_participants.contains_key(&to) {
-            self.vip_participants.insert(to, ());
-            println!("VIP Participants 最后一个元素: {:?}", to); // 打印最后一个元素
-        }  
-        self.vip_shares.insert(to, (share, unclaimed_reward.clone()));
+        self.vip_shares.insert(to, (address, share, unclaimed_reward.clone()));
         println!("VIP shares: {:?} | unclarmed reward: {:?}", share, unclaimed_reward.clone());
     }
 
     pub fn claim_vip_reward(&mut self, caller: Principal) -> Option<E8s> {
         let current_time = time() / VIP_ROUND_DELAY_NS; // 获取当前时间
 
-        if let Some((share, unclaimed_reward)) = self.vip_shares.get(&caller) {
+        if let Some((address, share, unclaimed_reward)) = self.vip_shares.get(&caller) {
             // 检查VIP时间是否到期
             if current_time >= share { // 假设 share 存储的是 VIP 到期时间
                 // 仅在用户在参与者列表中时移除
-                if self.vip_participants.contains_key(&caller) {
-                    self.vip_participants.remove(&caller);
-                }
+                // if self.vip_participants.contains_key(&caller) {
+                //     self.vip_participants.remove(&caller);
+                // }
                 // 如果有未领取的奖励
                 if unclaimed_reward > E8s::zero() {
                     let mut info = self.get_info();
@@ -152,7 +143,7 @@ impl SatslinkerState {
                 // 如果VIP时间未到期，返回原来的未领取奖励
                 let reward_to_return = unclaimed_reward; // 保存原来的未领取奖励
                 // 重置未领取奖励
-                self.vip_shares.insert(caller, (share, E8s::zero()));
+                self.vip_shares.insert(caller, (address, share, E8s::zero()));
                 return Some(reward_to_return); // 返回原来的未领取奖励
             }
         }
@@ -166,18 +157,19 @@ impl SatslinkerState {
         self.set_info(info);
 
         // 仅在用户不在参与者列表中时插入
-        if !self.vip_participants.contains_key(&caller) {
-            self.vip_participants.insert(caller, ());
-        }
+        // if !self.vip_participants.contains_key(&caller) {
+        //     self.vip_participants.insert(caller, ());
+        // }
 
-        if let Some((share, reward)) = self.vip_shares.get(&caller) {
-            self.vip_shares.insert(caller, (share, reward + unclaimed_reward));
-        } else {
-            self.vip_shares.insert(caller, (0u64, unclaimed_reward));
-        }
+        if let Some((address, share, reward)) = self.vip_shares.get(&caller) {
+            self.vip_shares.insert(caller, (address, share, reward + unclaimed_reward));
+        } 
+        // else {
+        //     self.vip_shares.insert(caller, (address, share, unclaimed_reward));
+        // }
     }
 
-    pub fn mint_pledge_share(&mut self, qty: E8s, pledge_time: TimestampNs, to: Principal) {
+    pub fn mint_pledge_share(&mut self, qty: E8s, pledge_time: Timestamp, to: Principal) {
         // Add new SATSLINK share to the account
         let cur_opt = self.pledge_shares.get(&to);
         let mut info = self.get_info();
@@ -267,18 +259,12 @@ impl SatslinkerState {
 
     // returns true if any winner was determined
     pub fn distribute_lottery_rewards(&mut self) -> bool {
-        // only run the protocol if someone is minting
-        if self.pledge_shares.len() == 0 {
-            return true;
-        }
-
         let mut info = self.get_info();
         let mut cur_reward: ECs<8> = info.current_token_reward.clone();
 
         cur_reward /= ECs::<8>::from(10u64); // 转换为整数形式，分配10%的块奖励
         info.total_token_lottery += cur_reward.clone();
         self.set_info(info);
-
         true // 返回 true，表示开发者奖励分配已完成
     }
 
@@ -300,12 +286,12 @@ impl SatslinkerState {
         let mut accounts_to_update = Vec::new();
     
         // **第一步：遍历 vip_shares 并分类**
-        for (account, (vip_time, unclaimed_reward)) in self.vip_shares.iter() {
+        for (account, (address, vip_time, unclaimed_reward)) in self.vip_shares.iter() {
             if current_time >= vip_time && unclaimed_reward == ECs::<8>::zero() {
                 println!("过期VIP用户: {:?}", account);
                 accounts_to_remove.push(account.clone());
             } else {
-                accounts_to_update.push((account.clone(), vip_time.clone(), unclaimed_reward.clone()));
+                accounts_to_update.push((account.clone(), address.clone(), vip_time.clone(), unclaimed_reward.clone()));
             }
         }
     
@@ -326,10 +312,10 @@ impl SatslinkerState {
         let new_reward = ECs::<8>::new(reward_per_account);
 
         // **第四步：更新有效账户的奖励**
-        for (account, vip_time, unclaimed_reward) in accounts_to_update {
+        for (account, address, vip_time, unclaimed_reward) in accounts_to_update {
             // 更新账户奖励值
             let updated_reward = unclaimed_reward + new_reward.clone();
-            self.vip_shares.insert(account.clone(), (vip_time.clone(), updated_reward.clone()));
+            self.vip_shares.insert(account.clone(), (address.clone(), vip_time.clone(), updated_reward.clone()));
             println!("账号: {:?}, 过期时间: {:?}, 新奖励: {:?}", account, vip_time, updated_reward);
         }
     
@@ -339,21 +325,19 @@ impl SatslinkerState {
 
     // Return true if the staking round has completed
     pub fn distribute_pledge_rewards(&mut self) -> bool {
+        let mut info = self.get_info();
+        let mut cur_reward = info.current_token_reward.clone();
+        cur_reward *= ECs::<8>::from(375u64) / ECs::<8>::from(1000u64); // 0.375 转换为整数形式，分配37.5%的块奖励
 
         // only run the protocol if someone is minting
         if self.pledge_shares.len() == 0 {
-            return true;
+            info.total_token_lottery += cur_reward.clone();
+            self.set_info(info);
+            return false;
         }
-
-        let info = self.get_info();
-
-        let mut cur_reward = info.current_token_reward.clone();
-
-        cur_reward *= ECs::<8>::from(375u64) / ECs::<8>::from(1000u64); // 0.375 转换为整数形式，分配37.5%的块奖励
 
         let mut accounts_to_update = Vec::new(); // 用于存储需要更新的账户信息
         let current_time = ic_cdk::api::time() / VIP_ROUND_DELAY_NS; // 获取当前时间
-
         // Loop through the staked accounts
         for (account, (share, pledge_satslink_time, unclaimed_reward)) in self.pledge_shares.iter() {
             // 计算质押到期时间
@@ -382,20 +366,15 @@ impl SatslinkerState {
     }
 
     pub fn distribute_dev_rewards(&mut self) -> bool{
-        // only run the protocol if someone is minting
-        if self.pledge_shares.len() == 0 {
-            return true;
-        }
-
         let mut info = self.get_info();
-
         let mut cur_reward = info.current_token_reward.clone();
 
-        cur_reward *= ECs::<8>::from(25u64) / ECs::<8>::from(1000u64); // 转换为整数形式，分配2.5%的块奖励
-        info.total_token_dev += cur_reward.clone();
+        // 分配2.5%的块奖励给开发者
+        cur_reward *= ECs::<8>::from(25u64) / ECs::<8>::from(1000u64);
+        info.total_token_dev += cur_reward;
         self.set_info(info);
 
-        true // 返回 true，表示开发者奖励分配已完成
+        true
     }
 
     pub fn get_info(&self) -> SatslinkerStateInfo {
@@ -406,24 +385,18 @@ impl SatslinkerState {
         self.info.set(info).expect("Unable to store info");
     }
 
-    pub fn get_satslinkers(&self) -> GetSatslinkersResponse {
-        let mut entries = Vec::new();
+    pub fn get_satslinkers(&self, address: Address) -> GetVIPuserResponse {
+        let mut entry = Vec::new();
 
-        // 获取 VIP 参与者信息
-        for (account, (share, unclaimed_reward)) in self.vip_shares.iter() {
-            println!("satslinker vip shares:{:?} | {:?} | {:?} ", account, share, unclaimed_reward);
-            let is_vip_participant = self.vip_participants.contains_key(&account);
-            entries.push((account, E8s::from(share), unclaimed_reward, is_vip_participant));
+        for (principal, (participant_address, share, rewards)) in self.vip_shares.iter() {
+            if participant_address == address {
+                // 如果找到匹配的 address，添加到 entries 中
+                entry.push((principal.clone(), participant_address.clone(), share.clone(), rewards.clone(), true));
+                println!("satslinker vip shares:{:?} | {:?} | {:?} | {:?} ", principal, address, share, rewards);
+            }
         }
-
-        // 获取质押参与者信息
-        for (account, (share, _, unclaimed_reward)) in self.pledge_shares.iter() {
-            println!("satslinker pledge shares:{:?} | {:?} | {:?} ", account, share, unclaimed_reward);
-            let is_pledge_participant = self.pledge_participants.contains_key(&account);
-            entries.push((account, share, unclaimed_reward, is_pledge_participant));
-        }
-
-        GetSatslinkersResponse { entries }
+    
+        GetVIPuserResponse { entry }
     }
 
     pub fn get_totals(&self, caller: &Principal) -> GetTotalsResponse {
@@ -431,14 +404,15 @@ impl SatslinkerState {
         let fee = SatslinkerStateInfo::get_current_fee();
         let is_satslink_enabled = info.is_satslink_enabled();
 
-        let (share_1, unclaimed_reward_1) = self.vip_shares
+        let (_, share_1, unclaimed_reward_1) = self.vip_shares
             .get(caller)
-            .map(|(s, r)| (s.clone(), r.clone()))
-            .unwrap_or((0u64, ECs::zero()));
-        let vip_status = self.vip_participants.contains_key(caller);
+            .map(|(a, s, r)| (a.clone(), s.clone(), r.clone()))
+            .unwrap_or_default();
+        //let vip_status = self.vip_participants.contains_key(caller);
+        let vip_status = self.vip_shares.contains_key(caller);
 
         let (share_2, _, unclaimed_reward_2) = self.pledge_shares
-            .get(caller)
+            .get(&caller)
             .map(|(s, t, r)| (s.clone(), t, r.clone()))
             .unwrap_or((ECs::zero(), 0u64, ECs::zero()));
         let pledge_status = self.pledge_participants.contains_key(caller);
@@ -459,7 +433,7 @@ impl SatslinkerState {
             is_satslink_enabled,
 
             total_pledge_participants: self.pledge_participants.len(),
-            total_vip_participants: self.vip_participants.len(),
+            total_vip_participants: self.vip_shares.len(),
 
             icp_to_cycles_exchange_rate: icp_to_cycles_exchange_rate,
 

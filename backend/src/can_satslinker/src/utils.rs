@@ -10,10 +10,14 @@ use ic_cdk::{
 use ic_e8s::c::E8s;
 use ic_cdk_timers::set_timer;
 
-use icrc_ledger_types::icrc1::{
+use icrc_ledger_types::{
+    icrc1::{
         account::Account, 
-        transfer::TransferArg
-    };
+        transfer::TransferArg,
+    },
+    icrc2::transfer_from::TransferFromArgs,
+    icrc2::allowance::AllowanceArgs,
+};
 
 use ic_ledger_types::{
     AccountBalanceArgs, 
@@ -53,7 +57,7 @@ use shared::{
     ICP_FEE, 
 };
 
-use crate::subaccount_of;
+// use crate::subaccount_of;
 
 thread_local! {
     pub static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -62,20 +66,21 @@ thread_local! {
     pub static STATE: RefCell<SatslinkerState> = RefCell::new(
         SatslinkerState {
             vip_shares: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))),
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))), // VIP Shares 使用内存区域 0
             ),
-            pledge_shares:StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))),
+            pledge_shares: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))), // Pledge Shares 使用内存区域 1
             ),
-            info: Cell::init(MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))), 
+            info: Cell::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))), // Info 使用内存区域 2
                 SatslinkerStateInfo::default()
             )
             .expect("Unable to create total supply cell"),
-            vip_participants: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
-            ),
+            // vip_participants: StableBTreeMap::init(
+            //     MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))) // VIP Participants 使用内存区域 3
+            // ),
             pledge_participants: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3)))
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))) // Pledge Participants 使用内存区域 4
             ),
         }
     )
@@ -281,69 +286,36 @@ fn redistribute_icps() {
 }
 
 pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<String, String> {
-    let caller_subaccount = subaccount_of(caller());
+    // let caller_subaccount = subaccount_of(caller());
     let canister_id = id();
     let satslink_icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
 
-    // let approve_result = satslink_icp_can.icrc2_approve(ApproveArgs{
-    //     from_subaccount : None,
-    //     spender : Account::from(canister_id),
-    //     amount : Nat::from(qty_e8s_u64 + ICP_FEE),
-    //     expected_allowance : None,
-    //     expires_at : None,
-    //     fee : Some(Nat::from(ICP_FEE)),
-    //     memo : None,
-    //     created_at_time : None,    
-    // }).await.unwrap().0;
-    // match approve_result {
-    //     Ok(value) => Ok(format!("{}|{}|{:?}", caller(), canister_id, value)),
-    //     Err(err) => Err(format!("{:?}", err)),
-    // }
+    let token_allowance = satslink_icp_can.icrc2_allowance(
+        AllowanceArgs {
+                account: Account::from(caller()),
+                spender: Account::from(canister_id),
+            }).await.unwrap().0;
+    ic_cdk::println!("token allowance: {:?}", token_allowance);
+    
+    let transferfrom_result = satslink_icp_can.icrc2_transfer_from(
+        TransferFromArgs{
+                spender_subaccount : None,
+                from : Account { 
+                    owner: caller(), 
+                    subaccount: None 
+                },
+                to : Account{ 
+                    owner: canister_id,
+                    subaccount: Some(SATSLINKER_REDISTRIBUTION_SUBACCOUNT),
+                },
+                amount :  Nat::from(qty_e8s_u64),
+                fee : Some(Nat::from(ICP_FEE)),
+                memo : None,
+                created_at_time : None,
+            }).await
+            .map_err(|e| format!("{:?}", e));
 
-    // let token_allowance = satslink_icp_can.icrc2_allowance(AllowanceArgs {
-    //     account: Account::from(caller()),
-    //     spender: Account::from(canister_id),
-    // }).await.unwrap().0;
-    // ic_cdk::println!("token allowance: {:?}", token_allowance);
-    // let transferfrom_result = satslink_icp_can.icrc2_transfer_from(TransferFromArgs{
-    //     spender_subaccount : None,
-    //     from : Account { 
-    //         owner: caller(), 
-    //         subaccount: None 
-    //     },
-    //     to : Account{ 
-    //         owner: canister_id,
-    //         subaccount: Some(SATSLINKER_REDISTRIBUTION_SUBACCOUNT),
-    //     },
-    //     amount :  Nat::from(qty_e8s_u64 + ICP_FEE),
-    //     fee : Some(Nat::from(ICP_FEE)),
-    //     memo : None,
-    //     created_at_time : None,
-    // }).await
-    // .map_err(|e| format!("{:?}", e));
-
-    // match transferfrom_result {
-    //     Ok((value,)) => Ok(format!("{}|{}|{:?}", caller(), canister_id, value)),
-    //     Err(err) => Err(format!("{:?}", err)),
-    // }
-
-    let transfer_result = satslink_icp_can.icrc1_transfer(TransferArg {
-            to: Account {
-                owner: canister_id,
-                subaccount: Some(SATSLINKER_REDISTRIBUTION_SUBACCOUNT),
-            },
-            amount: Nat::from(qty_e8s_u64),
-            from_subaccount: Some(caller_subaccount),
-            fee: Some(Nat::from(ICP_FEE)),
-            created_at_time: None,
-            memo: None,
-        })
-        .await
-        .map_err(|e| format!("{:?}", e));
-        
-
-    // 返回 transfer_result 的结果
-    match transfer_result {
+    match transferfrom_result {
         Ok((value,)) => Ok(format!("{}|{}|{:?}", caller(), canister_id, value)),
         Err(err) => Err(format!("{:?}", err)),
     }
