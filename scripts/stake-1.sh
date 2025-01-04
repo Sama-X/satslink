@@ -1,13 +1,3 @@
-# 检查当前授权额度
-dfx canister call nns-ledger icrc2_allowance "(record {
-    account = record {
-        owner = principal \"$(dfx identity get-principal)\";
-    };
-    spender = record {
-        owner = principal \"bkyz2-fmaaa-aaaaa-qaaaq-cai\";
-    }
-})"
-
 
 # 金额要大于实际需要转账的金额
 dfx canister call nns-ledger icrc2_approve "(record {
@@ -19,6 +9,18 @@ dfx canister call nns-ledger icrc2_approve "(record {
     memo = null;
     from_subaccount = null;
     created_at_time = null
+})"
+
+sleep 2
+
+# 检查当前授权额度
+dfx canister call nns-ledger icrc2_allowance "(record {
+    account = record {
+        owner = principal \"$(dfx identity get-principal)\";
+    };
+    spender = record {
+        owner = principal \"bkyz2-fmaaa-aaaaa-qaaaq-cai\";
+    }
 })"
 
 sleep 2

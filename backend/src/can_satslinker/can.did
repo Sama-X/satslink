@@ -21,7 +21,7 @@ type GetTotalsResponse = record {
   current_share_fee : nat;
 };
 type GetVIPuserResponse = record {
-  entry : vec record { principal; blob; nat64; nat; bool };
+  entry : vec record { blob; principal; nat64; nat; bool };
 };
 type LotteryRequest = record { qty_e8s_u64 : nat64 };
 type PledgeRequest = record { qty_e8s_u64 : nat64 };

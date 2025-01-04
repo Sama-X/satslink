@@ -76,11 +76,8 @@ thread_local! {
                 SatslinkerStateInfo::default()
             )
             .expect("Unable to create total supply cell"),
-            // vip_participants: StableBTreeMap::init(
-            //     MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))) // VIP Participants 使用内存区域 3
-            // ),
-            pledge_participants: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(4))) // Pledge Participants 使用内存区域 4
+            vip_participants: StableBTreeMap::init(
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))) // VIP Participants 使用内存区域 3
             ),
         }
     )
@@ -122,6 +119,7 @@ pub fn lottery_and_pos_and_pledge() {
                 if s.distribute_lottery_rewards(){
                     if info.total_token_lottery > E8s::from(POS_ROUND_START_REWARD_E8S){
                         // 如果区块奖励大于等于POS_ROUND_START_REWARD_E8S，则转给抽奖池，然后清零
+                        println!("如果游戏奖励大于等于POS_ROUND_START_REWARD_E8S,则转给抽奖池者后则清零: {:?}", info.total_token_lottery);
                         temp_satslink_token_lottery = info.total_token_lottery;
                         info.total_token_lottery = E8s::zero();
                         info.total_token_minted += &temp_satslink_token_lottery;
@@ -137,6 +135,7 @@ pub fn lottery_and_pos_and_pledge() {
                 if s.distribute_dev_rewards(){
                     if info.total_token_dev > E8s::from(POS_ROUND_START_REWARD_E8S){
                         // 如果开发者奖励大于等于POS_ROUND_START_REWARD_E8S，转开发者后则清零, 
+                        println!("如果开发者奖励大于等于POS_ROUND_START_REWARD_E8S,转开发者后则清零: {:?}", info.total_token_dev);
                         temp_satslink_token_dev = info.total_token_dev;
                         info.total_token_dev = E8s::zero();
                         info.total_token_minted += &temp_satslink_token_dev;
@@ -333,7 +332,7 @@ pub fn lottery_running(qty: u64, to: Principal) {
                 owner: this_canister_id,
                 subaccount: Some(SATSLINKER_LOTTERY_SUBACCOUNT),
             },
-            amount: Nat(qty.into()),
+            amount: Nat::from(qty),
             from_subaccount: None,
             fee: None,
             created_at_time: None,

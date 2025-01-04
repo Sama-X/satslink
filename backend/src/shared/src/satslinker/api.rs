@@ -9,7 +9,7 @@ use super::types::Address;
 
 #[derive(CandidType, Deserialize)]
 pub struct GetVIPuserResponse {
-    pub entry: Vec<(Principal, Address, Timestamp, E8s, bool)>,
+    pub entry: Vec<(Address,Principal, Timestamp, E8s, bool)>,
 }
 
 #[derive(CandidType, Deserialize)]
