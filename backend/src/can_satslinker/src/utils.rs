@@ -7,7 +7,7 @@ use ic_cdk::{
     id, 
     spawn, 
 };
-use ic_e8s::c::E8s;
+use ic_e8s::c::{E8s, ECs};
 use ic_cdk_timers::set_timer;
 
 use icrc_ledger_types::{
@@ -96,6 +96,7 @@ fn init_seed() {
 }
 
 pub fn set_lottery_and_pos_and_pledge_timer(){
+    print!("执行set_lottery_and_pos_and_pledge_timer函数");
     set_timer(Duration::from_nanos(0), lottery_and_pos_and_pledge);
 }
 
@@ -110,74 +111,100 @@ pub fn lottery_and_pos_and_pledge() {
         let this_canister_id = id();
         let mut temp_satslink_token_lottery = E8s::zero();
         let mut temp_satslink_token_dev = E8s::zero();
+        let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
 
         STATE.with_borrow_mut(|s| {
             let mut info = s.get_info();
             let satslink_enabled = info.is_satslink_enabled();
-            if satslink_enabled{
-                // 处理 lottery 逻辑，返回是否完成： 奖励为区块链奖励的10%
-                if s.distribute_lottery_rewards(){
-                    if info.total_token_lottery > E8s::from(POS_ROUND_START_REWARD_E8S){
-                        // 如果区块奖励大于等于POS_ROUND_START_REWARD_E8S，则转给抽奖池，然后清零
-                        println!("如果游戏奖励大于等于POS_ROUND_START_REWARD_E8S,则转给抽奖池者后则清零: {:?}", info.total_token_lottery);
-                        temp_satslink_token_lottery = info.total_token_lottery;
-                        info.total_token_lottery = E8s::zero();
-                        info.total_token_minted += &temp_satslink_token_lottery;
-                    }
-                }
-                // 处理 pos 逻辑，奖励为区块奖励的50%
-                s.distribute_vip_pos_rewards();
+            ic_cdk::println!("调用lottery_and_pos_and_pledge前的开发总币数量: {:?}", info.total_token_dev.clone());
+            ic_cdk::println!("调用lottery_and_pos_and_pledge前的游戏总币数量: {:?}", info.total_token_lottery.clone());
+            if satslink_enabled {
+                // 先计算游戏奖励（10%）
+                let mut cur_lottery_reward = info.current_token_reward.clone();
+                cur_lottery_reward *= ECs::<8>::from(100u64);
+                cur_lottery_reward /= ECs::<8>::from(1000u64);  // 10% = 100/1000
+                info.total_token_lottery += cur_lottery_reward.clone();
+                println!("游戏奖励增加: {:?}", cur_lottery_reward);
+                println!("当前游戏总奖励: {:?}", info.total_token_lottery);
 
-                // 处理 pledge 逻辑，区块奖励的37.5%平均分配给质押用户
+                // 再计算开发者奖励（2.5%）
+                let mut cur_dev_reward = info.current_token_reward.clone();
+                cur_dev_reward *= ECs::<8>::from(25u64);
+                cur_dev_reward /= ECs::<8>::from(1000u64);  // 2.5% = 25/1000
+                info.total_token_dev += cur_dev_reward.clone();
+                println!("开发者奖励增加: {:?}", cur_dev_reward);
+                println!("当前开发者总奖励: {:?}", info.total_token_dev);
+
+                // 最后执行其他分配（POS和质押）
+                s.distribute_vip_pos_rewards();
                 s.distribute_pledge_rewards();
 
-                // 处理 dev 逻辑，区块奖励的2.5%分配给开发者
-                if s.distribute_dev_rewards(){
-                    if info.total_token_dev > E8s::from(POS_ROUND_START_REWARD_E8S){
-                        // 如果开发者奖励大于等于POS_ROUND_START_REWARD_E8S，转开发者后则清零, 
-                        println!("如果开发者奖励大于等于POS_ROUND_START_REWARD_E8S,转开发者后则清零: {:?}", info.total_token_dev);
-                        temp_satslink_token_dev = info.total_token_dev;
-                        info.total_token_dev = E8s::zero();
-                        info.total_token_minted += &temp_satslink_token_dev;
-                    }
+                // 处理游戏奖励转账
+                if info.total_token_lottery > E8s::from(POS_ROUND_START_REWARD_E8S) {
+                    println!("游戏奖励达到阈值，准备转账: {:?}", info.total_token_lottery);
+                    temp_satslink_token_lottery = info.total_token_lottery.clone();
+                    info.total_token_minted = info.total_token_minted.clone() + &temp_satslink_token_lottery;
                 }
+
+                // 处理开发者奖励转账
+                if info.total_token_dev > E8s::from(POS_ROUND_START_REWARD_E8S) {
+                    println!("开发者奖励达到阈值，准备转账: {:?}", info.total_token_dev);
+                    temp_satslink_token_dev = info.total_token_dev.clone();
+                    info.total_token_minted = info.total_token_minted.clone() + &temp_satslink_token_dev;
+                }
+
                 info.complete_round();
             }
             s.set_info(info);
-        }); 
+        });
 
-        let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
-        //  send a little bit to the subaccount, where the devs can withdraw them
-        let _ = satslink_token_can.icrc1_transfer(TransferArg {
-            to: Account{
-                owner: this_canister_id, 
-                subaccount: Some(SATSLINKER_LOTTERY_SUBACCOUNT)
-            },
-            amount: Nat(temp_satslink_token_lottery.val),
-            from_subaccount: None,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-        })
-        .await
-        .map_err(|e| format!("{:?}", e))
-        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
+        //transfer to lottery pool and dev pool
+        if temp_satslink_token_lottery > E8s::zero() {
+            let transfer_result = satslink_token_can.icrc1_transfer(TransferArg {
+                to: Account {
+                    owner: this_canister_id,
+                    subaccount: Some(SATSLINKER_LOTTERY_SUBACCOUNT)
+                },
+                amount: Nat(temp_satslink_token_lottery.val),
+                from_subaccount: None,
+                fee: None,
+                created_at_time: None,
+                memo: None,
+            }).await;
+            
+            // 只有在转账成功后才清零
+            if transfer_result.is_ok() {
+                STATE.with_borrow_mut(|s| {
+                    let mut info = s.get_info();
+                    info.total_token_lottery = E8s::zero();
+                    s.set_info(info);
+                });
+            }
+        }
 
-        let _ = satslink_token_can.icrc1_transfer(TransferArg {
-            to: Account{
-                owner: this_canister_id, 
-                subaccount: Some(SATSLINKER_DEV_FEE_SUBACCOUNT)
-            },
-            amount: Nat(temp_satslink_token_dev.val),
-            from_subaccount: None,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-        })
-        .await
-        .map_err(|e| format!("{:?}", e))
-        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
-        
+        if temp_satslink_token_dev > E8s::zero() {
+            let transfer_result = satslink_token_can.icrc1_transfer(TransferArg {
+                to: Account {
+                    owner: this_canister_id,
+                    subaccount: Some(SATSLINKER_DEV_FEE_SUBACCOUNT)
+                },
+                amount: Nat(temp_satslink_token_dev.val),
+                from_subaccount: None,
+                fee: None,
+                created_at_time: None,
+                memo: None,
+            }).await;
+
+            // 只有在转账成功后才清零
+            if transfer_result.is_ok() {
+                STATE.with_borrow_mut(|s| {
+                    let mut info = s.get_info();
+                    info.total_token_dev = E8s::zero();
+                    s.set_info(info);
+                });
+            }
+        }
+
         set_timer(Duration::from_nanos(POS_ROUND_DELAY_NS), lottery_and_pos_and_pledge);
     });
 }

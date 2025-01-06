@@ -246,7 +246,7 @@ impl SatslinkerState {
 
         cur_reward /= ECs::<8>::from(10u64); // 转换为整数形式，分配10%的块奖励
         info.total_token_lottery += cur_reward.clone();
-        println!("分配给游戏的总币数量: {:?}", info.total_token_lottery.clone());
+       //println!("分配给游戏的总币数量: {:?}", info.total_token_lottery.clone());
         self.set_info(info);
         true // 返回 true，表示开发者奖励分配已完成
     }
@@ -259,9 +259,10 @@ impl SatslinkerState {
     
         let info = self.get_info();
         let mut cur_reward = info.current_token_reward.clone();
-    
-        cur_reward /= ECs::<8>::two(); // 分配50%的块奖励
-        println!("当前奖励: {:?}", cur_reward);
+
+        cur_reward *= ECs::<8>::from(500u64);
+        cur_reward /= ECs::<8>::from(1000u64);  // 50% = 500/1000
+        println!("当前VIP奖励: {:?}", cur_reward);
     
         let current_time = ic_cdk::api::time() / VIP_ROUND_DELAY_NS;
     
@@ -308,17 +309,19 @@ impl SatslinkerState {
 
     // Return true if the staking round has completed
     pub fn distribute_pledge_rewards(&mut self) -> bool {
-        let mut info = self.get_info();
+        let info = self.get_info();
         let mut cur_reward = info.current_token_reward.clone();
-        cur_reward *= ECs::<8>::from(375u64) / ECs::<8>::from(1000u64); // 0.375 转换为整数形式，分配37.5%的块奖励
-        println!("Pledge质押STL分配到的: {:?}", cur_reward.clone());
+        cur_reward *= ECs::<8>::from(375u64);
+        cur_reward /= ECs::<8>::from(1000u64);  // 37.5% = 375/1000
+        println!("当前质押奖励: {:?}", cur_reward);
+        //println!("Pledge质押STL分配到的: {:?}", cur_reward.clone());
         // only run the protocol if pledge shares len is 0
-        if self.pledge_shares.len() == 0 {
-            info.total_token_lottery += cur_reward.clone();
-            println!("分配给游戏的总币数量: {:?}", info.total_token_lottery.clone());
-            self.set_info(info);
-            return false;
-        }
+        // if self.pledge_shares.len() == 0 {
+        //     info.total_token_lottery += cur_reward.clone();
+        //     //println!("分配给游戏的总币数量: {:?}", info.total_token_lottery.clone());
+        //     self.set_info(info);
+        //     return false;
+        // }
 
         let mut accounts_to_update = Vec::new(); // 用于存储需要更新的账户信息
         let current_time = ic_cdk::api::time() / VIP_ROUND_DELAY_NS; // 获取当前时间
@@ -337,20 +340,20 @@ impl SatslinkerState {
         }
 
         // 更新状态信息
-        self.set_info(info);
-
+        //self.set_info(info);
         true // 返回 true，表示质押此轮次奖励分配已完成
     }
 
     pub fn distribute_dev_rewards(&mut self) -> bool{
         let mut info = self.get_info();
         let mut cur_reward = info.current_token_reward.clone();
+        //println!("调用前的总币数量: {:?}", info.total_token_dev.clone());
         // 分配2.5%的块奖励给开发者
         cur_reward *= ECs::<8>::from(25u64) / ECs::<8>::from(1000u64);
-        info.total_token_dev += cur_reward;
-        println!("分配给开发的总币数量: {:?}", info.total_token_dev.clone());
+        //println!("当前奖励: {:?}", cur_reward);
+        info.total_token_dev += cur_reward;        
+        //println!("调用后的总币数量: {:?}", info.total_token_dev.clone());
         self.set_info(info);
-
         true
     }
 

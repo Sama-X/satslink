@@ -425,7 +425,9 @@ fn init_hook() {
     set_init_seed_one_timer();
     set_cycles_icp_exchange_rate_timer();
     set_icp_redistribution_timer();
+    print!("开始执行set_lottery_and_pos_and_pledge_timer函数");
     set_lottery_and_pos_and_pledge_timer();
+    print!("结束执行set_lottery_and_pos_and_pledge_timer函数");
 }
 
 #[post_upgrade]
