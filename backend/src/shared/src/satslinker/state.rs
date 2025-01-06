@@ -40,14 +40,12 @@ impl SatslinkerState {
     // TODO: delete this function, once the initialization is complete
     pub fn init_tmp_can_migrate(&mut self) {
         let mut info = self.get_info();
-
-        // 仅在第一次调用时执行
+        // Only execute on the first call
         if info.tmp_can_vip_migrate.is_none() {
             let can_migrate_vip_set: BTreeSet<_> = self.vip_shares.iter().map(|(k, _)| k.clone()).collect();
             info.tmp_can_vip_migrate = Some(can_migrate_vip_set);
         }
-
-        // 仅在第一次调用时执行
+        
         if info.tmp_can_pledge_migrate.is_none() {
             let can_migrate_pledge_set: BTreeSet<_> = self.pledge_shares.iter().map(|(k, _)| k.clone()).collect();
             info.tmp_can_pledge_migrate = Some(can_migrate_pledge_set);
@@ -64,7 +62,7 @@ impl SatslinkerState {
         }
 
          // 处理 VIP 份额迁移
-         if let Some((address_1, share_1, reward_1)) = self.vip_shares.remove(caller) {
+        if let Some((address_1, share_1, reward_1)) = self.vip_shares.remove(caller) {
             let (address, share, reward) = if let Some((address_2, share_2, reward_2)) = self.vip_shares.get(&to) {
                 (address_2.clone(), share_1 + share_2, reward_1 + reward_2)
             } else {
@@ -239,18 +237,6 @@ impl SatslinkerState {
         self.set_info(info);
     }
 
-    // returns true if any winner was determined
-    pub fn distribute_lottery_rewards(&mut self) -> bool {
-        let mut info = self.get_info();
-        let mut cur_reward: ECs<8> = info.current_token_reward.clone();
-
-        cur_reward /= ECs::<8>::from(10u64); // 转换为整数形式，分配10%的块奖励
-        info.total_token_lottery += cur_reward.clone();
-       //println!("分配给游戏的总币数量: {:?}", info.total_token_lottery.clone());
-        self.set_info(info);
-        true // 返回 true，表示开发者奖励分配已完成
-    }
-
     // dostribute rewards for vip users
     pub fn distribute_vip_pos_rewards(&mut self) -> bool {
         if self.vip_shares.is_empty() {
@@ -365,19 +351,6 @@ impl SatslinkerState {
         }
 
         // 更新状态信息
-        self.set_info(info);
-        true
-    }
-
-    pub fn distribute_dev_rewards(&mut self) -> bool{
-        let mut info = self.get_info();
-        let mut cur_reward = info.current_token_reward.clone();
-        //println!("调用前的总币数量: {:?}", info.total_token_dev.clone());
-        // 分配2.5%的块奖励给开发者
-        cur_reward *= ECs::<8>::from(25u64) / ECs::<8>::from(1000u64);
-        //println!("当前奖励: {:?}", cur_reward);
-        info.total_token_dev += cur_reward;        
-        //println!("调用后的总币数量: {:?}", info.total_token_dev.clone());
         self.set_info(info);
         true
     }
