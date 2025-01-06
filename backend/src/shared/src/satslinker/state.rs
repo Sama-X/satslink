@@ -309,39 +309,64 @@ impl SatslinkerState {
 
     // Return true if the staking round has completed
     pub fn distribute_pledge_rewards(&mut self) -> bool {
-        let info = self.get_info();
+        let mut info = self.get_info();
         let mut cur_reward = info.current_token_reward.clone();
         cur_reward *= ECs::<8>::from(375u64);
         cur_reward /= ECs::<8>::from(1000u64);  // 37.5% = 375/1000
-        println!("当前质押奖励: {:?}", cur_reward);
-        //println!("Pledge质押STL分配到的: {:?}", cur_reward.clone());
-        // only run the protocol if pledge shares len is 0
-        // if self.pledge_shares.len() == 0 {
-        //     info.total_token_lottery += cur_reward.clone();
-        //     //println!("分配给游戏的总币数量: {:?}", info.total_token_lottery.clone());
-        //     self.set_info(info);
-        //     return false;
-        // }
+        ic_cdk::println!("当前质押奖励: {:?}", cur_reward);
 
-        let mut accounts_to_update = Vec::new(); // 用于存储需要更新的账户信息
-        let current_time = ic_cdk::api::time() / VIP_ROUND_DELAY_NS; // 获取当前时间
-        // Loop through the staked accounts
-        for (account, (share, pledge_satslink_time, unclaimed_reward)) in self.pledge_shares.iter() {
-            // 计算质押到期时间
-            let pledge_expiration_time = pledge_satslink_time + PLEDGE_ROUND_DELAY_NS; // 假设质押时间以纳秒为单位，1个月约为30天
+        if self.pledge_shares.len() == 0 {
+            return true;
+        }
+
+        let current_time = ic_cdk::api::time() / VIP_ROUND_DELAY_NS;
+        let mut accounts_to_update = Vec::new();
+        let mut valid_shares_total = E8s::zero();
+
+        // 第一次遍历：收集到期账户和计算有效质押总量
+        let mut expired_accounts = Vec::new();
+        for (account, (share, pledge_time, _)) in self.pledge_shares.iter() {
+            let pledge_expiration_time = pledge_time + PLEDGE_ROUND_DELAY_NS;
             if current_time >= pledge_expiration_time {
-                // Calculate the user's reward based on their share of the total staked amount
-                let new_reward = &cur_reward * &share / &info.total_pledge_token_supply;// 按照份额分配奖励
-                accounts_to_update.push((account, (share, pledge_satslink_time, unclaimed_reward + new_reward)));
+                expired_accounts.push(account.clone());
+            } else {
+                valid_shares_total += &share;
             }
         }
+
+        // 第二次遍历：处理未到期账户的奖励
+        for (account, (share, pledge_time, unclaimed_reward)) in self.pledge_shares.iter() {
+            if !expired_accounts.contains(&account) {
+                let new_reward = if valid_shares_total > E8s::zero() {
+                    &cur_reward * &share / &valid_shares_total
+                } else {
+                    E8s::zero()
+                };
+                ic_cdk::println!("账户 {:?} 获得质押奖励: {:?}", account, new_reward);
+                let updated_reward = unclaimed_reward + &new_reward;
+                accounts_to_update.push((
+                    account.clone(),
+                    (share.clone(), pledge_time, updated_reward)
+                ));
+            }
+        }
+
+        // 更新未到期账户的奖励
         for (account, entry) in accounts_to_update {
             self.pledge_shares.insert(account, entry);
         }
 
+        // 移除到期账户并更新总质押量
+        for account in expired_accounts {
+            if let Some((share, _, _)) = self.pledge_shares.remove(&account) {
+                info.total_pledge_token_supply -= &share;
+                ic_cdk::println!("移除到期质押账户 {:?}, 质押量: {:?}", account, share);
+            }
+        }
+
         // 更新状态信息
-        //self.set_info(info);
-        true // 返回 true，表示质押此轮次奖励分配已完成
+        self.set_info(info);
+        true
     }
 
     pub fn distribute_dev_rewards(&mut self) -> bool{
