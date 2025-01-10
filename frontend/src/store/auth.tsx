@@ -38,6 +38,7 @@ export interface IAuthStoreContext {
   disabled: Accessor<boolean>;
   disable: () => void;
   enable: () => void;
+  getEthAddress: () => Promise<number[] | null>;
 }
 
 const AuthContext = createContext<IAuthStoreContext>();
@@ -218,6 +219,29 @@ export function AuthStore(props: IChildren) {
     }
   };
 
+  const getEthAddress = async () => {
+    if (authProvider() !== "MSQ") return null;
+    
+    try {
+      const provider = window.ethereum;
+      if (!provider || typeof provider.request !== 'function') return null;
+
+      const accounts = await provider.request({ method: 'eth_accounts' });
+      if (!Array.isArray(accounts) || accounts.length === 0) return null;
+      
+      const hexAddress = accounts[0] as string;
+      const bytes = hexAddress
+        .slice(2)
+        .match(/.{1,2}/g)!
+        .map(byte => parseInt(byte, 16));
+      
+      return bytes;
+    } catch (error) {
+      logErr(ErrorCode.AUTH, "Failed to get ETH address: " + debugStringify(error));
+      return null;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -235,6 +259,7 @@ export function AuthStore(props: IChildren) {
         disable,
         enable,
         iiClient,
+        getEthAddress,
       }}
     >
       {props.children}

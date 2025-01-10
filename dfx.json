@@ -15,6 +15,18 @@
       "package": "satslinker",
       "type": "rust"
     },
+    "frontend": {
+      "build": [
+        ""
+      ],
+      "frontend": {
+        "entrypoint": "frontend/index.html"
+      },
+      "source": [
+        "frontend/dist"
+      ],
+      "type": "assets"
+    },
     "internet_identity": {
       "type": "custom",
       "candid": "backend/src/internet_identity/internet_identity.did",

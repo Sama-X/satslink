@@ -247,7 +247,12 @@ export function SatslinkerStore(props: IChildren) {
     const myDepositAccount = getMyDepositAccount()!;
     const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
     const satslinker = newSatslinkerActor(agent()!);
-    await satslinker.stake({ qty_e8s_u64: b - 10_000n });
+    const auth = useAuth();
+    const addressBytes = await auth.getEthAddress();
+    if (addressBytes === null) {
+      err(ErrorCode.AUTH, "Failed to get ETH address");
+    }
+    await satslinker.stake({ qty_e8s_u64: b - 10_000n, address: addressBytes });
 
     enable();
 
@@ -304,7 +309,7 @@ export function SatslinkerStore(props: IChildren) {
     disable();
 
     const satslinker = newSatslinkerActor(agent()!);
-    const result = await satslinker.claim_reward({ to });
+    const result = await satslinker.claim_vip_reward({ to });
 
     if ("Err" in result) {
       logErr(ErrorCode.UNKNOWN, debugStringify(result.Err));
@@ -323,7 +328,7 @@ export function SatslinkerStore(props: IChildren) {
     assertAuthorized();
 
     const satslinker = newSatslinkerActor(agent()!);
-    const result = await satslinker.can_migrate_msq_account();
+    const result = await satslinker.can_migrate_stl_account();
 
     setCanMigrate(result);
   };
@@ -345,7 +350,7 @@ export function SatslinkerStore(props: IChildren) {
       const iiIdentity = await accessIiIdentity();
 
       const satslinker = newSatslinkerActor(agent()!);
-      await satslinker.migrate_msq_account({ to: iiIdentity.getPrincipal() });
+      await satslinker.migrate_stl_account({ to: iiIdentity.getPrincipal() });
 
       await deauthorize();
       window.location.reload();
@@ -427,7 +432,7 @@ export function SatslinkerStore(props: IChildren) {
       });
 
       const satslinker = newSatslinkerActor(agent()!);
-      await satslinker.verify_decide_id({ jwt });
+      //await satslinker.verify_decide_id({ jwt });
 
       fetchTotals();
     } finally {

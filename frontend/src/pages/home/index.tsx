@@ -157,7 +157,7 @@ export function HomePage() {
       <div class="fixed bottom-5 right-5 z-10 flex sm:hidden gap-2">
         <Btn
           icon={EIconKind.Twitter}
-          linkTo="https://x.com/msqwallet"
+          linkTo="https://x.com/gknmoon"
           linkTarget="_blank"
           color={COLORS.white}
           iconSize={24}
@@ -167,7 +167,7 @@ export function HomePage() {
         />
         <Btn
           icon={EIconKind.Github}
-          linkTo="https://github.com/fort-major/satslink"
+          linkTo="https://github.com/sama-x/satslink"
           linkTarget="_blank"
           color={COLORS.white}
           iconSize={24}
@@ -198,7 +198,7 @@ export function HomePage() {
               <div class="hidden sm:flex gap-2">
                 <Btn
                   icon={EIconKind.Twitter}
-                  linkTo="https://x.com/msqwallet"
+                  linkTo="https://x.com/gknmoon"
                   linkTarget="_blank"
                   color={COLORS.white}
                   iconSize={24}
@@ -208,7 +208,7 @@ export function HomePage() {
                 />
                 <Btn
                   icon={EIconKind.Github}
-                  linkTo="https://github.com/fort-major/satslink"
+                  linkTo="https://github.com/sama-x/satslink"
                   linkTarget="_blank"
                   color={COLORS.white}
                   iconSize={24}

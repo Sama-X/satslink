@@ -9,7 +9,7 @@ use ic_cdk::{
     post_upgrade, 
     query, 
     update,
-    println
+    println,
 };
 
 use icrc_ledger_types::icrc1::{

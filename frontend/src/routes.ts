@@ -21,7 +21,7 @@ function route<T>(r: T): T & IRoute {
 export const ROOT = route({
   $: {
     "/": route({
-      component: HomePage,
+      component: PoolPage,
     }),
     pool: route({
       component: PoolPage,

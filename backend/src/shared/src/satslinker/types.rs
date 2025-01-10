@@ -37,11 +37,11 @@ pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 3000_0000;      // 30%
 // pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个月质押周期
 
 //测试时间
-pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000; // VIP以分钟为单位
-pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS / 10;                  // 每6秒出一个1块
-pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;   // 每1分钟更新一次ICP/Cycles费率
+pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000;                        //  VIP以分钟为单位
+pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS / 10;                   // 每6秒出一个1块
+pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;      // 每1分钟更新一次ICP/Cycles费率
 pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;        // 每1个分钟重新分配一次ICP
-pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 100;                    // 100分钟质押周期
+pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 1000;               // 1000分钟质押周期
 
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]

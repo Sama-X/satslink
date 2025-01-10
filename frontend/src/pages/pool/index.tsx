@@ -252,7 +252,7 @@ export const PoolPage = () => {
       <ProfileFull />
 
       <div class="flex flex-col gap-4">
-        <p class={headerClass}>Deposited ICP</p>
+        <p class={headerClass}>Purchase membership with ICP</p>
         <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
           <Show when={mySubaccount()}>
             <div class="flex flex-col gap-3">
@@ -302,7 +302,7 @@ export const PoolPage = () => {
       </div>
 
       <div class="flex flex-col gap-4">
-        <p class={headerClass}>Unclaimed SATSLINK</p>
+        <p class={headerClass}>Unclaimed STK</p>
         <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
           <Show when={totals.data}>
             <div class="flex flex-col gap-1">
@@ -344,7 +344,7 @@ export const PoolPage = () => {
         </div>
       </div>
 
-      <div class="flex flex-col gap-4">
+      {/* <div class="flex flex-col gap-4">
         <Show fallback={<p class={headerClass}>Satslink ICP to Continue</p>} when={totals.data && satslinkoutLeftoverBlocks()!}>
           <div class="flex flex-row justify-between items-center gap-4">
             <p class={headerClass}>Minting In Progress</p>
@@ -372,7 +372,7 @@ export const PoolPage = () => {
             </For>
           </div>
         </Show>
-      </div>
+      </div> */}
 
       <Switch>
         <Match when={withdrawModalVisible()}>
@@ -386,7 +386,7 @@ export const PoolPage = () => {
           </Modal>
         </Match>
         <Match when={claimModalVisible()}>
-          <Modal title="Claim SATSLINK" onClose={handleClaimModalClose}>
+          <Modal title="Claim STK" onClose={handleClaimModalClose}>
             {claimForm}
           </Modal>
         </Match>

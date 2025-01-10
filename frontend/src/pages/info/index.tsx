@@ -45,17 +45,17 @@ export const InfoPage = () => {
           <p class="text-white font-bold text-6xl leading-[60px] md:text-[200px] md:leading-[200px]">
             ${satslinkUSDPrice()}
           </p>
-          <p class="text-gray-140 text-lg font-thin italic text-right">per 1 SATSLINK</p>
+          <p class="text-gray-140 text-lg font-thin italic text-right">Per 1 STK</p>
         </div>
         <div class="flex flex-col-reverse md:flex-row gap-2 md:items-center md:justify-between">
           <div class="flex flex-col md:flex-row gap-2">
-            <a
+            {/* <a
               href="https://dexscreener.com/icp/pfaxf-iiaaa-aaaag-qkiia-cai"
               class="flex flex-grow md:flex-grow-0 items-center justify-center gap-5 text-white font-semibold rounded-full px-6 py-4 bg-gray-110"
               target="_blank"
             >
               <span class="text-nowrap">DEX Screener</span>
-            </a>
+            </a> */}
             <a
               href="https://t5t44-naaaa-aaaah-qcutq-cai.raw.ic0.app/token/egjwt-lqaaa-aaaak-qi2aa-cai/transactions"
               class="flex flex-grow md:flex-grow-0 items-center justify-center gap-2 text-white font-semibold rounded-full px-6 py-4 bg-gray-120"
@@ -65,7 +65,7 @@ export const InfoPage = () => {
             </a>
           </div>
 
-          <a
+          {/* <a
             href="https://app.icpswap.com/swap?input=ryjl3-tyaaa-aaaaa-aaaba-cai&output=egjwt-lqaaa-aaaak-qi2aa-cai"
             class="flex items-center flex-nowrap justify-center gap-2 text-white font-semibold rounded-full px-6 py-4 bg-orange"
             target="_blank"
@@ -75,18 +75,18 @@ export const InfoPage = () => {
               class="h-6"
               src="https://app.icpswap.com/static/media/logo-dark.7b8c12091e650c40c5e9f561c57473ba.svg"
             />
-          </a>
+          </a> */}
         </div>
       </div>
 
-      <div class="flex flex-col gap-4">
+      {/* <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl">Return Calculator</p>
         <ReturnCalculator />
-      </div>
+      </div> */}
 
       <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl flex gap-4 items-center">
-          Active Pool Members
+          Active VIP Pool Members
           <Show when={totals.data?.isLotteryEnabled}>
             <Icon kind={EIconKind.Lottery} color={COLORS.orange} />
           </Show>

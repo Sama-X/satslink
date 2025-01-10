@@ -42,7 +42,6 @@ service : () -> {
   enable_satslink : () -> ();
   get_satslinkers : (blob) -> (GetVIPuserResponse) query;
   get_totals : () -> (GetTotalsResponse) query;
-  icrc1_transfer : (ClaimRewardRequest) -> ();
   migrate_stl_account : (ClaimRewardRequest) -> (record {});
   play_lottery : (LotteryRequest) -> (record {});
   pledge : (PledgeRequest) -> (record {});
