@@ -38,9 +38,7 @@ use shared::{
             PledgeRequest, 
             PledgeResponse, 
             RedeemRequest,
-            RedeemResponse,
-            WithdrawRequest, 
-            WithdrawResponse
+            RedeemResponse
         },
             types::TCycles,
             types::Address,
@@ -69,34 +67,34 @@ use utils::{
 
 mod utils;
 
+// #[update]
+// async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
+//     assert_running();
+
+//     let c = caller();
+//     let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
+
+//     icp_can.icrc1_transfer(TransferArg {
+//             from_subaccount: Some(subaccount_of(c)),
+//             to: Account {
+//                 owner: req.to,
+//                 subaccount: None,
+//             },
+//             amount: Nat(req.qty_e8s.val),
+//             fee: None,
+//             created_at_time: None,
+//             memo: None,
+//         })
+//         .await
+//         .expect("Unable to call ICP canister")
+//         .0
+//         .expect("Unable to transfer ICP");
+
+//     WithdrawResponse {}
+// }
+
 #[update]
-async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
-    assert_running();
-
-    let c = caller();
-    let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
-
-    icp_can.icrc1_transfer(TransferArg {
-            from_subaccount: Some(subaccount_of(c)),
-            to: Account {
-                owner: req.to,
-                subaccount: None,
-            },
-            amount: Nat(req.qty_e8s.val),
-            fee: None,
-            created_at_time: None,
-            memo: None,
-        })
-        .await
-        .expect("Unable to call ICP canister")
-        .0
-        .expect("Unable to transfer ICP");
-
-    WithdrawResponse {}
-}
-
-#[update]
-async fn stake(req: StakeRequest) -> StakeResponse {
+async fn purchase(req: StakeRequest) -> StakeResponse {
     assert_running();
 
     if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {

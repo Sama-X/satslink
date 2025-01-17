@@ -26,7 +26,7 @@ dfx canister call nns-ledger icrc2_allowance "(record {
 sleep 2
 
 # stake 操作
-dfx canister call satslinker stake '(
+dfx canister call satslinker purchase '(
     record { 
         qty_e8s_u64 = 1_000_000_000; 
         address = blob "\a4\2d\35\cc\66\34\c0\53\29\25\a3\b8\44\bc\45\4e\44\38\f4\4e"

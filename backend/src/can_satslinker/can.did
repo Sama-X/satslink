@@ -33,7 +33,6 @@ type RefundTokenKind = variant { ICP : vec record { blob; nat64 } };
 type Result = variant { Ok : nat; Err : text };
 type StakeRequest = record { qty_e8s_u64 : nat64; address : blob };
 type StakeResponse = record { result : Result; message : text };
-type WithdrawRequest = record { to : principal; qty_e8s : nat };
 service : () -> {
   can_migrate_stl_account : () -> (bool) query;
   claim_pledge_reward : (ClaimRewardRequest) -> (ClaimRewardResponse);
@@ -45,11 +44,10 @@ service : () -> {
   migrate_stl_account : (ClaimRewardRequest) -> (record {});
   play_lottery : (LotteryRequest) -> (record {});
   pledge : (PledgeRequest) -> (record {});
+  purchase : (StakeRequest) -> (StakeResponse);
   redeem : (RedeemRequest) -> (RedeemResponse);
   refund_lost_tokens : (RefundLostTokensRequest) -> (RefundLostTokensResponse);
   resume : () -> ();
-  stake : (StakeRequest) -> (StakeResponse);
   stop : () -> ();
   subaccount_of : (principal) -> (blob) query;
-  withdraw : (WithdrawRequest) -> (record {});
 }
