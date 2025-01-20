@@ -113,13 +113,13 @@ async fn purchase(req: StakeRequest) -> StakeResponse {
     STATE.with_borrow_mut(|s| {
         let cycles_rate = s.get_info().get_icp_to_cycles_exchange_rate();
         let cycles_share = staked_icps_e12s * cycles_rate;
-        let time_in_minutes = cycles_share.clone() / TCycles::from(1000u64); // 每 1,000 cycles 换得 1 分钟
+        let time_in_minutes = cycles_share.clone() / TCycles::from(1000u64); // Convert 1,000 cycles to 1 minute
 
-        // 获取当前时间戳（以秒为单位）
+        // Get current timestamp in seconds
         let current_time = time() / VIP_ROUND_DELAY_NS;
-        let expiration_time = current_time + time_in_minutes.val.bits() * ONE_MINUTE_NS / VIP_ROUND_DELAY_NS; // 计算到期时间戳（以秒为单位）
+        let expiration_time = current_time + time_in_minutes.val.bits() * ONE_MINUTE_NS / VIP_ROUND_DELAY_NS; // Calculate expiration timestamp in seconds
 
-         println!("到期时间: {:?} 兑换成cycle: {:?}", expiration_time, cycles_share.val);
+         println!("Expiration time: {:?} Converted to cycles: {:?}", expiration_time, cycles_share.val);
          s.mint_vip_share(expiration_time, caller(), req.address); 
     });
 
@@ -128,7 +128,7 @@ async fn purchase(req: StakeRequest) -> StakeResponse {
 
 #[update]
 async fn play_lottery(req: LotteryRequest) -> LotteryResponse {
-    // 实现异步逻辑
+    // Implement async logic
     assert_running();
 
     if req.qty_e8s_u64 < MIN_STL_LOTTERY_E8S_U64 {
@@ -153,7 +153,7 @@ async fn pledge(req: PledgeRequest) -> PledgeResponse {
 
     let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
 
-    // 转账 SATSLINK 代币到发行账号
+    // Transfer SATSLINK tokens to issuer account
     let transfer_result = satslink_token_can
         .icrc1_transfer(TransferArg {
             to: Account {
@@ -168,25 +168,25 @@ async fn pledge(req: PledgeRequest) -> PledgeResponse {
         })
         .await;
 
-    // 处理转账结果
+    // Handle transfer result
     match transfer_result {
-        Ok((Ok(_),)) => { // 成功转账
-            let current_time = time() / VIP_ROUND_DELAY_NS; // 获取当前时间
-            // 更新质押记录
+        Ok((Ok(_),)) => { // Successful transfer
+            let current_time = time() / VIP_ROUND_DELAY_NS; // Get current time
+            // Update pledge record
             STATE.with_borrow_mut(|s| {
                 s.mint_pledge_share(satslink_amount.clone(), current_time, caller_id); 
             });
 
-            // 返回成功响应
+            // Return success response
             PledgeResponse {}
         },
-        Ok((Err(e),)) => { // 转账失败
-            // 这里可以记录错误日志或处理错误
+        Ok((Err(e),)) => { // Transfer failed
+            // Log error or handle error here
             eprintln!("Transfer failed: {:?}", e);
             PledgeResponse {}
         },
-        Err(e) => { // 调用转账时发生错误
-            // 这里可以记录错误日志或处理错误
+        Err(e) => { // Error occurred during transfer call
+            // Log error or handle error here
             eprintln!("Transfer call error: {:?}", e);
             PledgeResponse {}
         }
@@ -200,29 +200,29 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
     let caller_id = caller();
     //let info = STATE.with_borrow_mut(|s| s.get_info());
 
-    // 检查用户是否有质押记录
+    // Check if user has pledge record
     let (cur_satslink_share, pledge_satslink_time, _) = STATE.with_borrow_mut(|s| {
         s.pledge_shares.get(&caller_id).clone().unwrap_or((E8s::zero(), 0u64, E8s::zero()))
     });
 
-    // 获取当前时间
+    // Get current time
     let current_time = time() / VIP_ROUND_DELAY_NS; 
-    // 检查质押时间是否到达
+    // Check if pledge time has reached
     if current_time < (pledge_satslink_time + ONE_MONTH_NS) / VIP_ROUND_DELAY_NS {
-        return RedeemResponse { result: Err(format!("Not release yet")) }; // 修复：返回响应
+        return RedeemResponse { result: Err("Tokens are still locked. Please wait until the lock period ends.".to_string()) };
     }
 
-    // 允许用户赎回 SATSLINK 代币
+    // Initialize token canister client
     let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
 
-    // 转账 SATSLINK 代币到用户
+    // Transfer SATSLINK tokens to user
     let res = satslink_token_can
         .icrc1_transfer(TransferArg {
             to: Account {
-                owner: req.to, // 用户的账户
+                owner: req.to, // User's account
                 subaccount: None,
             },
-            amount: Nat(cur_satslink_share.clone().val), // 用户的质押份额
+            amount: Nat(cur_satslink_share.clone().val), // User's pledged amount
             from_subaccount: None,
             fee: None,
             created_at_time: None,
@@ -239,14 +239,14 @@ async fn redeem(req: RedeemRequest) -> RedeemResponse {
                     s.pledge_shares.remove(&caller_id);
                     s.get_info().total_pledge_token_supply -= &cur_satslink_share;
                 });
-                return RedeemResponse { result: Ok(Nat::from(cur_satslink_share.clone().val)) }; // 修复：使用 cur_satslink_share
+                return RedeemResponse { result: Ok(Nat::from(cur_satslink_share.clone().val)) }; // Use cur_satslink_share
             },
             Err(e) => {   
-                return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // 修复：返回响应
+                return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // Return response
             }
         },
         Err(e) => {
-            return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // 修复：返回响应
+            return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // Return response
         }
     }
 }
@@ -401,15 +401,15 @@ fn init_hook() {
     set_init_seed_one_timer();
     set_cycles_icp_exchange_rate_timer();
     set_icp_redistribution_timer();
-    print!("开始执行set_lottery_and_pos_and_pledge_timer函数");
+    print!("Starting set_lottery_and_pos_and_pledge_timer function");
     set_lottery_and_pos_and_pledge_timer();
-    print!("结束执行set_lottery_and_pos_and_pledge_timer函数");
+    print!("Finished set_lottery_and_pos_and_pledge_timer function");
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
-    // TODO: delete before the next upgrade
+    // TODO: Remove this before the next upgrade
     STATE.with_borrow_mut(|s| s.init_tmp_can_migrate());
 
     set_cycles_icp_exchange_rate_timer();

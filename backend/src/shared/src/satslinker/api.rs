@@ -71,7 +71,7 @@ pub struct StakeRequest {
 #[derive(CandidType, Deserialize)]
 pub struct StakeResponse {
     pub result: Result<Nat, String>,
-    pub message: String, // 新增字段，用于返回字符串信息
+    pub message: String, // New field for returning string messages
 }
 
 #[derive(CandidType, Deserialize)]

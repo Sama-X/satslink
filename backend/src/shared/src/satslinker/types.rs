@@ -30,23 +30,23 @@ pub const REDISTRIBUTION_LOTTERY_SHARE_E8S: u64 = 1000_0000;    // 10%
 pub const REDISTRIBUTION_SWAPPOOL_SHARE_E8S: u64 = 6000_0000;  // 60%
 pub const REDISTRIBUTION_DEV_SHARE_E8S: u64 = 3000_0000;      // 30%
 
-// pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000; // VIP以分钟为单位
-// pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 2;                  // 每两分钟出一个1块
-// pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;   // 每10分钟更新一次ICP/Cycles费率
-// pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;        // 每3个小时重新分配一次ICP
-// pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1个月质押周期
+// pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000; // VIP rounds in minutes
+// pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 2;                  // Generate 1 block every 2 minutes
+// pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 10;   // Update ICP/Cycles exchange rate every 10 minutes
+// pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_HOUR_NS * 3;        // Redistribute ICP every 3 hours
+// pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MONTH_NS;                    // 1 month pledge cycle
 
-//测试时间
-pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000;                        //  VIP以分钟为单位
-pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS / 10;                   // 每6秒出一个1块
-pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;      // 每1分钟更新一次ICP/Cycles费率
-pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;        // 每1个分钟重新分配一次ICP
-pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 1000;               // 1000分钟质押周期
+// Test time constants
+pub const VIP_ROUND_DELAY_NS: u64 = 1_000_000_000;                        // VIP rounds in minutes
+pub const POS_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS / 10;                   // Generate 1 block every 6 seconds
+pub const ICPSWAP_PRICE_UPDATE_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;      // Update ICP/Cycles exchange rate every 1 minute
+pub const ICP_REDISTRIBUTION_INTERVAL_NS: u64 = ONE_MINUTE_NS * 1;        // Redistribute ICP every 1 minute
+pub const PLEDGE_ROUND_DELAY_NS: u64 = ONE_MINUTE_NS * 1000;               // 1000 minutes pledge cycle
 
 
 #[derive(CandidType, Deserialize, Clone, Default, Debug)]
 pub struct SatslinkerStateInfo {
-    pub total_pledge_token_supply: E8s, // 当前所有用户质押的 SATSLINK 代币总额
+    pub total_pledge_token_supply: E8s, // Total SATSLINK tokens pledged by all users
     pub total_token_lottery: E8s,
     pub total_token_dev: E8s,
     pub total_token_minted: E8s,

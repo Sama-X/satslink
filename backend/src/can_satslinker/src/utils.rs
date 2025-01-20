@@ -67,18 +67,18 @@ thread_local! {
     pub static STATE: RefCell<SatslinkerState> = RefCell::new(
         SatslinkerState {
             vip_shares: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))), // VIP Shares 使用内存区域 0
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(0))), // VIP Shares uses memory region 0
             ),
             pledge_shares: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))), // Pledge Shares 使用内存区域 1
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(1))), // Pledge Shares uses memory region 1
             ),
             info: Cell::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))), // Info 使用内存区域 2
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(2))), // Info uses memory region 2
                 SatslinkerStateInfo::default()
             )
             .expect("Unable to create total supply cell"),
             vip_participants: StableBTreeMap::init(
-                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))) // VIP Participants 使用内存区域 3
+                MEMORY_MANAGER.with_borrow(|m| m.get(MemoryId::new(3))) // VIP Participants uses memory region 3
             ),
         }
     )
@@ -97,7 +97,7 @@ fn init_seed() {
 }
 
 pub fn set_lottery_and_pos_and_pledge_timer(){
-    print!("执行set_lottery_and_pos_and_pledge_timer函数");
+    print!("Executing set_lottery_and_pos_and_pledge_timer function");
     set_timer(Duration::from_nanos(0), lottery_and_pos_and_pledge);
 }
 
@@ -117,39 +117,39 @@ pub fn lottery_and_pos_and_pledge() {
         STATE.with_borrow_mut(|s| {
             let mut info = s.get_info();
             let satslink_enabled = info.is_satslink_enabled();
-            ic_cdk::println!("调用lottery_and_pos_and_pledge前的开发总币数量: {:?}", info.total_token_dev.clone());
-            ic_cdk::println!("调用lottery_and_pos_and_pledge前的游戏总币数量: {:?}", info.total_token_lottery.clone());
+            ic_cdk::println!("Total dev tokens before lottery_and_pos_and_pledge: {:?}", info.total_token_dev.clone());
+            ic_cdk::println!("Total lottery tokens before lottery_and_pos_and_pledge: {:?}", info.total_token_lottery.clone());
             if satslink_enabled {
-                // 先计算游戏奖励（10%）
+                // First calculate lottery reward (10%)
                 let mut cur_lottery_reward = info.current_token_reward.clone();
                 cur_lottery_reward *= ECs::<8>::from(100u64);
                 cur_lottery_reward /= ECs::<8>::from(1000u64);  // 10% = 100/1000
                 info.total_token_lottery += cur_lottery_reward.clone();
-                println!("游戏奖励增加: {:?}", cur_lottery_reward);
-                println!("当前游戏总奖励: {:?}", info.total_token_lottery);
+                println!("Lottery reward increased: {:?}", cur_lottery_reward);
+                println!("Current total lottery reward: {:?}", info.total_token_lottery);
 
-                // 再计算开发者奖励（2.5%）
+                // Then calculate developer reward (2.5%)
                 let mut cur_dev_reward = info.current_token_reward.clone();
                 cur_dev_reward *= ECs::<8>::from(25u64);
                 cur_dev_reward /= ECs::<8>::from(1000u64);  // 2.5% = 25/1000
                 info.total_token_dev += cur_dev_reward.clone();
-                println!("开发者奖励增加: {:?}", cur_dev_reward);
-                println!("当前开发者总奖励: {:?}", info.total_token_dev);
+                println!("Developer reward increased: {:?}", cur_dev_reward);
+                println!("Current total developer reward: {:?}", info.total_token_dev);
 
-                // 最后执行其他分配（POS和质押）
+                // Finally perform other distributions (POS and pledge)
                 s.distribute_vip_pos_rewards();
                 s.distribute_pledge_rewards();
 
-                // 处理游戏奖励转账
+                // Process lottery reward transfer
                 if info.total_token_lottery > E8s::from(POS_ROUND_START_REWARD_E8S) {
-                    println!("游戏奖励达到阈值，准备转账: {:?}", info.total_token_lottery);
+                    println!("Lottery reward reached threshold, preparing transfer: {:?}", info.total_token_lottery);
                     temp_satslink_token_lottery = info.total_token_lottery.clone();
                     info.total_token_minted = info.total_token_minted.clone() + &temp_satslink_token_lottery;
                 }
 
-                // 处理开发者奖励转账
+                // Process developer reward transfer
                 if info.total_token_dev > E8s::from(POS_ROUND_START_REWARD_E8S) {
-                    println!("开发者奖励达到阈值，准备转账: {:?}", info.total_token_dev);
+                    println!("Developer reward reached threshold, preparing transfer: {:?}", info.total_token_dev);
                     temp_satslink_token_dev = info.total_token_dev.clone();
                     info.total_token_minted = info.total_token_minted.clone() + &temp_satslink_token_dev;
                 }
@@ -173,7 +173,7 @@ pub fn lottery_and_pos_and_pledge() {
                 memo: None,
             }).await;
             
-            // 只有在转账成功后才清零
+            // Only reset to zero after successful transfer
             if transfer_result.is_ok() {
                 STATE.with_borrow_mut(|s| {
                     let mut info = s.get_info();
@@ -196,7 +196,7 @@ pub fn lottery_and_pos_and_pledge() {
                 memo: None,
             }).await;
 
-            // 只有在转账成功后才清零
+            // Only reset to zero after successful transfer
             if transfer_result.is_ok() {
                 STATE.with_borrow_mut(|s| {
                     let mut info = s.get_info();
@@ -349,12 +349,12 @@ pub async fn stake_callers_icp_for_redistribution(qty_e8s_u64: u64) -> Result<St
 }
 
 pub fn lottery_running(qty: u64, to: Principal) {
-    spawn(async move { // 使用 move 关键字以获取 qty 和 to 的所有权
+    spawn(async move { // Use move keyword to take ownership of qty and to
         let this_canister_id = id();
-        //#3 实现lottery游戏，游戏池子为块奖励的10%
+        // Implement lottery game with 10% of block reward as prize pool
         let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
 
-        // 发送 token 到指定账户
+        // Transfer tokens to target account
         let _ = satslink_token_can.icrc1_transfer(TransferArg {
             to: Account {
                 owner: this_canister_id,
@@ -370,26 +370,26 @@ pub fn lottery_running(qty: u64, to: Principal) {
         .map_err(|e| format!("{:?}", e))
         .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
 
-        // 获取当前交易哈希
+        // Get current transaction hash
         let (rand,) = raw_rand().await.expect("Unable to fetch rand");
         let last_digit_qty = qty % 10; 
 
-        // 从交易哈希的尾部开始查找数字字符
+        // Find digit characters from the end of transaction hash
         let mut last_digit_hash = None;
-        for c in rand.to_vec().iter().rev() { // 修改为使用 to_vec() 并迭代字节
-            if c.is_ascii_digit() { // 使用 is_ascii_digit() 检查字符
-                last_digit_hash = Some(c - b'0'); // 将字节转换为数字
-                break; // 找到数字后退出循环
+        for c in rand.to_vec().iter().rev() { // Use to_vec() and iterate bytes
+            if c.is_ascii_digit() { // Use is_ascii_digit() to check character
+                last_digit_hash = Some(c - b'0'); // Convert byte to digit
+                break; // Exit loop after finding digit
             }
         }
 
-        // 判断尾数是否都是单数或都是双数
+        // Check if last digits are both odd or both even
         if let Some(last_digit) = last_digit_hash {
-            // 将 last_digit 转换为 u64 以便与 last_digit_qty 比较
-            if last_digit_qty % 2 == last_digit as u64 % 2 { // 将 last_digit 转换为 u64
-                // 转双倍给 caller
+            // Convert last_digit to u64 for comparison with last_digit_qty
+            if last_digit_qty % 2 == last_digit as u64 % 2 { // Convert last_digit to u64
+                // Double the amount for caller
                 let double_amount = qty * 2;
-                // 发送双倍金额给 caller
+                // Send double amount to caller
                 let _ = satslink_token_can.icrc1_transfer(TransferArg {
                     to: Account {
                         owner: to,
@@ -406,8 +406,8 @@ pub fn lottery_running(qty: u64, to: Principal) {
                 .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
             }
         } else {
-            // 如果没有找到数字，记录日志或采取其他措施
-            // 例如：log("No digit found in transaction hash");
+            // If no digit found, log or take other actions
+            // Example: log("No digit found in transaction hash");
         }       
     });
 }
