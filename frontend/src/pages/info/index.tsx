@@ -86,7 +86,7 @@ export const InfoPage = () => {
 
       <div class="flex flex-col gap-4">
         <p class="text-white font-semibold text-4xl flex gap-4 items-center">
-          Active VIP Pool Members
+          质押者
           <Show when={totals.data?.isLotteryEnabled}>
             <Icon kind={EIconKind.Lottery} color={COLORS.orange} />
           </Show>
@@ -95,10 +95,10 @@ export const InfoPage = () => {
           <div class="mb-2 grid grid-cols-5 md:grid-cols-6 items-start md:items-center gap-3 text-xs font-semibold text-gray-140">
             <p class="col-span-1 text-right"></p>
             <p class="col-span-1 text-right hidden md:block">PID</p>
-            <p class="col-span-1 text-right">Fuel Left</p>
-            <p class="col-span-1 text-right">Blocks Left</p>
-            <p class="col-span-1 text-right">Pool Share</p>
-            <p class="col-span-1 text-right">Share Worth</p>
+            <p class="col-span-1 text-right">到期时间</p>
+            <p class="col-span-1 text-right">剩余区块数</p>
+            <p class="col-span-1 text-right">份额</p>
+            <p class="col-span-1 text-right">价值</p>
           </div>
 
           <div class="flex flex-col gap-2">

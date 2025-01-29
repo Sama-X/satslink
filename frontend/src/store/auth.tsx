@@ -1,14 +1,4 @@
-import {
-  Accessor,
-  batch,
-  createContext,
-  createEffect,
-  createResource,
-  createSignal,
-  on,
-  onMount,
-  useContext,
-} from "solid-js";
+import { Accessor, batch, createContext, createEffect, createResource, createSignal, on, onMount, useContext, } from "solid-js";
 import { IChildren, ONE_WEEK_NS } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { Identity, Agent } from "@dfinity/agent";

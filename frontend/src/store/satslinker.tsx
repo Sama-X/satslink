@@ -13,25 +13,31 @@ import {
   VerifiablePresentationResponse,
 } from "@dfinity/verifiable-credentials/request-verifiable-presentation";
 
+// Define TCycles type
+type TCycles = bigint;
+
 export interface ITotals {
-  totalSharesSupply: EDs;
-  totalTcyclesSatslinked: EDs;
-  totalSatslinkTokenMinted: E8s;
-  currentSatslinkTokenReward: E8s;
-  posStartKey?: Principal;
+  totalPledgeTokenSupply: E8s;
+  totalTokenLottery: E8s;
+  totalTokenDev: E8s;
+  totalTokenMinted: E8s;
+  currentTokenReward: E8s;
+  currentShareFee: bigint;
+  isSatslinkEnabled: boolean;
+
   currentPosRound: bigint;
-  currentBlockShareFee: EDs;
   posRoundDelayNs: bigint;
-  isLotteryEnabled: boolean;
+  
+  totalPledgeParticipants: bigint;
+  totalVipParticipants: bigint;
+  icpToCyclesExchangeRate: bigint;
 
-  totalSatslinkers: bigint;
-  totalVerifiedAccounts: bigint;
-  totalLotteryParticipants: bigint;
-
-  yourShareTcycles: EDs;
-  yourUnclaimedReward: E8s;
-  yourDecideIdVerificationStatus: boolean;
-  yourLotteryEligibilityStatus: boolean;
+  yourVipShares: bigint;
+  yourVipUnclaimedRewardE8s: E8s;
+  yourVipEligibilityStatus: boolean;
+  yourPledgeShares: E8s;
+  yourPledgeUnclaimedRewardE8s: E8s;
+  yourPledgeEligibilityStatus: boolean;
 }
 
 export interface IPoolMember {
@@ -39,6 +45,11 @@ export interface IPoolMember {
   share: EDs;
   unclaimedReward: E8s;
   isVerifiedViaDecideID: boolean;
+}
+
+interface StakeResponse {
+  result: { Ok: bigint } | { Err: string };
+  message: string;
 }
 
 export interface ISatslinkerStoreContext {
@@ -51,7 +62,7 @@ export interface ISatslinkerStoreContext {
   stake: () => Promise<void>;
 
   canWithdraw: () => boolean;
-  withdraw: (to: Principal) => Promise<void>;
+  withdraw: (amount: number, to: Principal) => Promise<StakeResponse>;
 
   canClaimReward: () => boolean;
   claimReward: (to: Principal) => Promise<void>;
@@ -144,24 +155,27 @@ export function SatslinkerStore(props: IChildren) {
     const resp = await satslinker.get_totals();
 
     const iTotals: ITotals = {
-      totalSharesSupply: EDs.new(resp.total_icp_shares_supply, 12),
-      totalTcyclesSatslinked: EDs.new(resp.total_tcycles_satslinked, 12),
-      totalSatslinkTokenMinted: E8s.new(resp.total_token_minted),
-      currentSatslinkTokenReward: E8s.new(resp.current_token_reward),
-      posStartKey: optUnwrap(resp.pos_start_key),
-      posRoundDelayNs: resp.pos_round_delay_ns,
-      currentPosRound: resp.current_pos_round,
-      currentBlockShareFee: EDs.new(resp.current_share_fee, 12),
-      isLotteryEnabled: resp.is_satslink_enabled,
+      totalPledgeTokenSupply: E8s.new(resp.total_pledge_token_supply),
+      totalTokenLottery: E8s.new(resp.total_token_lottery),
+      totalTokenDev: E8s.new(resp.total_token_dev),
+      totalTokenMinted: E8s.new(resp.total_token_minted),
+      currentTokenReward: E8s.new(resp.current_token_reward),
+      currentShareFee: BigInt(resp.current_share_fee),
+      isSatslinkEnabled: resp.is_satslink_enabled,
 
-      totalSatslinkers: resp.total_satslinkers,
-      totalLotteryParticipants: resp.total_lottery_participants,
-      totalVerifiedAccounts: resp.total_verified_accounts,
+      currentPosRound: BigInt(resp.current_pos_round),
+      posRoundDelayNs: BigInt(resp.pos_round_delay_ns),
+      
+      totalPledgeParticipants: BigInt(resp.total_pledge_participants),
+      totalVipParticipants: BigInt(resp.total_vip_participants),
+      icpToCyclesExchangeRate: BigInt(resp.icp_to_cycles_exchange_rate),
 
-      yourShareTcycles: EDs.new(resp.your_share_tcycles, 12),
-      yourUnclaimedReward: E8s.new(resp.your_unclaimed_reward_e8s),
-      yourDecideIdVerificationStatus: resp.your_decide_id_verification_status,
-      yourLotteryEligibilityStatus: resp.your_lottery_eligibility_status,
+      yourVipShares: BigInt(resp.your_vip_shares),
+      yourVipUnclaimedRewardE8s: E8s.new(resp.your_vip_unclaimed_reward_e8s),
+      yourVipEligibilityStatus: resp.your_vip_eligibility_status,
+      yourPledgeShares: E8s.new(resp.your_pledge_shares),
+      yourPledgeUnclaimedRewardE8s: E8s.new(resp.your_pledge_unclaimed_reward_e8s),
+      yourPledgeEligibilityStatus: resp.your_pledge_eligibility_status
     };
 
     setTotals({ data: iTotals });
@@ -172,27 +186,28 @@ export function SatslinkerStore(props: IChildren) {
 
     let start: [] | [Principal] = [];
     const members = [];
-
     const satslinker = newSatslinkerActor(anonymousAgent()!);
 
-    while (true) {
-      const { entries } = await satslinker.get_satslinkers({ start, take: 1000 });
+    // 获取以太坊地址
+    const auth = useAuth();
+    const addressBytes = await auth.getEthAddress();
+    if (!addressBytes) {
+      console.error("未能获取以太坊地址");
+      return;
+    }
 
-      if (entries.length === 0) {
-        break;
-      }
+    // 调用 get_satslinkers 接口，传入以太坊地址
+    const response = await satslinker.get_satslinkers(addressBytes);
 
-      for (let entry of entries) {
-        let iPoolMember: IPoolMember = {
-          id: entry[0],
-          share: EDs.new(entry[1], 12),
-          unclaimedReward: E8s.new(entry[2]),
-          isVerifiedViaDecideID: entry[3],
-        };
+    for (let entry of response.entry) {
+      let iPoolMember: IPoolMember = {
+        id: entry[1], // Principal
+        share: EDs.new(entry[2], 12), // share
+        unclaimedReward: E8s.new(entry[3]), // unclaimed reward
+        isVerifiedViaDecideID: entry[4], // VIP status
+      };
 
-        members.push(iPoolMember);
-        start = [iPoolMember.id];
-      }
+      members.push(iPoolMember);
     }
 
     setPoolMembers(
@@ -252,7 +267,7 @@ export function SatslinkerStore(props: IChildren) {
     if (addressBytes === null) {
       err(ErrorCode.AUTH, "Failed to get ETH address");
     }
-    await satslinker.stake({ qty_e8s_u64: b - 10_000n, address: addressBytes });
+    await satslinker.purchase({ qty_e8s_u64: b - 10_000n, address: addressBytes });
 
     enable();
 
@@ -277,22 +292,14 @@ export function SatslinkerStore(props: IChildren) {
     return true;
   };
 
-  const withdraw: ISatslinkerStoreContext["withdraw"] = async (to) => {
-    assertAuthorized();
-
-    disable();
-
-    const myDepositAccount = getMyDepositAccount()!;
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
-
-    const satslinker = newSatslinkerActor(agent()!);
-    await satslinker.withdraw({ qty_e8s: b - 10_000n, to });
-
-    enable();
-
-    fetchTotals();
-    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-    logInfo(`Successfully withdrawn ${E8s.new(b).toString()} ICP`);
+  const withdraw: ISatslinkerStoreContext["withdraw"] = async (amount: number, to: Principal) => {
+    assertReadyToFetch();
+    const actor = newSatslinkerActor(agent()!);
+    const result = await actor.purchase({
+      qty_e8s_u64: E8s.new(BigInt(amount)).toBigIntRaw(),
+      address: new Uint8Array(to.toUint8Array())
+    });
+    return result;
   };
 
   const canClaimReward: ISatslinkerStoreContext["canClaimReward"] = () => {
@@ -300,7 +307,7 @@ export function SatslinkerStore(props: IChildren) {
 
     if (!totals.data) return false;
 
-    return totals.data.yourUnclaimedReward.gt(E8s.zero());
+    return totals.data.yourVipUnclaimedRewardE8s.gt(E8s.zero());
   };
 
   const claimReward: ISatslinkerStoreContext["claimReward"] = async (to) => {
@@ -393,7 +400,7 @@ export function SatslinkerStore(props: IChildren) {
     const p = authProvider();
     if (p === "MSQ") return false;
 
-    return !t.yourDecideIdVerificationStatus;
+    return !t.yourVipEligibilityStatus;
   };
 
   const verifyDecideId: ISatslinkerStoreContext["verifyDecideId"] = async () => {

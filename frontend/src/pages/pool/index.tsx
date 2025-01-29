@@ -6,6 +6,7 @@ import { Copyable } from "@components/copyable";
 import { EIconKind, Icon } from "@components/icon";
 import { Modal } from "@components/modal";
 import { Page } from "@components/page";
+import { QtyInput } from "@components/qty-input";
 import { getAvatarSrc, getPseudonym, ProfileFull } from "@components/profile/profile";
 import { Spoiler } from "@components/spoiler";
 import { TextInput } from "@components/text-input";
@@ -27,9 +28,9 @@ import { ONE_MIN_NS, Result } from "@utils/types";
 import { batch, createEffect, createResource, createSignal, For, Match, on, onMount, Show, Switch } from "solid-js";
 
 export const PoolPage = () => {
-  const { isAuthorized, identity, agent, assertAuthorized, disable, enable } = useAuth();
+  const auth = useAuth();
   const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf, claimLost, canClaimLost } = useTokens();
-  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, claimReward } = useSatslinker();
+  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, claimReward, poolMembers, fetchPoolMembers } = useSatslinker();
   const navigate = useNavigate();
 
   const [withdrawModalVisible, setWithdrawModalVisible] = createSignal(false);
@@ -37,11 +38,13 @@ export const PoolPage = () => {
   const [claimModalVisible, setClaimModalVisible] = createSignal(false);
   const [claimLostModalVisible, setClaimLostModalVisible] = createSignal(false);
   const [recepient, setRecepient] = createSignal(Result.Err<string>(""));
+  const [stakeAmount, setStakeAmount] = createSignal(Result.Err<number>(0));
+  const [ethAddress, setEthAddress] = createSignal("");
 
   const myPrincipal = () => {
-    if (!isAuthorized()) return undefined;
+    if (!auth.isAuthorized()) return undefined;
 
-    return identity()!.getPrincipal();
+    return auth.identity()!.getPrincipal();
   };
 
   const mySubaccount = () => {
@@ -82,17 +85,24 @@ export const PoolPage = () => {
       .toE8s();
   };
 
-  onMount(() => {
-    if (!isAuthorized()) {
+  onMount(async () => {
+    if (!auth.isAuthorized()) {
       navigate(ROOT.path);
       return;
     }
 
     fetchSubaccountOf(myPrincipal()!);
+    fetchPoolMembers();
+    
+    // 获取 ETH 地址
+    const address = await auth.getEthAddress();
+    if (address) {
+      setEthAddress(bytesToHex(new Uint8Array(address)));
+    }
   });
 
   createEffect(
-    on(isAuthorized, (ready) => {
+    on(auth.isAuthorized, (ready) => {
       if (!ready) {
         navigate(ROOT.path);
       }
@@ -143,11 +153,16 @@ export const PoolPage = () => {
 
   const handleSatslinkModalClose = () => {
     batch(() => {
+      setStakeAmount(Result.Err<number>(0));
       setSatslinkModalVisible(false);
     });
   };
 
   const handleSatslink = async () => {
+    const amount = stakeAmount().unwrapOk();
+    if (amount < 0.5) {
+      return;
+    }
     await stake();
     handleSatslinkModalClose();
   };
@@ -155,14 +170,59 @@ export const PoolPage = () => {
   const satslinkForm = (
     <div class="flex flex-col gap-8">
       <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Are you sure you want to satslink all deposited ICP?</p>
-        <p class="font-semibold text-orange">
-          This operation takes a significant amount of time! Please, wait patiently after pressing "Yes".
+        <p class="font-normal text-lg text-white">请输入要质押的 ICP 数量：</p>
+        <div class="flex flex-col gap-2">
+          <p class="font-semibold text-sm text-gray-140">
+            质押数量 <span class="text-errorRed">*</span>
+            <span class="text-gray-400 text-xs ml-2">(最小质押数量: 0.5 ICP)</span>
+          </p>
+          <QtyInput
+            value={stakeAmount().unwrap()}
+            onChange={setStakeAmount}
+            symbol="ICP"
+            validations={[
+              { required: null },
+              { min: 0.5 }
+            ]}
+          />
+        </div>
+
+        <div class="flex flex-col gap-2 mt-4">
+          <p class="font-semibold text-sm text-gray-140">
+            ETH 地址
+          </p>
+          <div class="bg-gray-900 rounded p-3 break-all text-gray-300 font-mono text-sm">
+            {ethAddress() || "未获取到 ETH 地址"}
+          </div>
+          <p class="text-xs text-gray-400">
+            这是您授权账户关联的 ETH 地址
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-2 mt-4">
+          <p class="font-semibold text-sm text-gray-140">
+            当前可用余额
+          </p>
+          <BalanceOf
+            tokenId={DEFAULT_TOKENS.icp}
+            owner={Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID)}
+            subaccount={mySubaccount()!}
+          />
+        </div>
+
+        <p class="font-semibold text-orange mt-4">
+          质押操作需要一定时间，请耐心等待交易完成。
         </p>
       </div>
       <div class="flex gap-2">
-        <Btn text="No" class="flex-grow" bgColor={COLORS.gray[105]} onClick={handleSatslinkModalClose} />
-        <Btn text="Yes" class="flex-grow" bgColor={COLORS.orange} onClick={handleSatslink} />
+        <Btn text="取消" class="flex-grow" bgColor={COLORS.gray[105]} onClick={handleSatslinkModalClose} />
+        <Btn 
+          text="确认质押" 
+          class="flex-grow" 
+          bgColor={COLORS.orange} 
+          onClick={handleSatslink}
+          disabled={stakeAmount().isErr() || !ethAddress()} 
+        />
       </div>
     </div>
   );
@@ -211,7 +271,7 @@ export const PoolPage = () => {
   };
 
   const handleClaimLost = async () => {
-    assertAuthorized();
+    auth.assertAuthorized();
 
     await claimLost(Principal.fromText(recepient().unwrapOk()));
 
@@ -223,8 +283,8 @@ export const PoolPage = () => {
       <div class="flex flex-col gap-4">
         <p class="font-normal text-lg text-white">Your lost assets we were able to find:</p>
         <div class="flex flex-col gap-2">
-          <BalanceOf tokenId={DEFAULT_TOKENS.satslink} owner={identity()?.getPrincipal()} />
-          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={identity()?.getPrincipal()} />
+          <BalanceOf tokenId={DEFAULT_TOKENS.satslink} owner={auth.identity()?.getPrincipal()} />
+          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={auth.identity()?.getPrincipal()} />
         </div>
         <div class="flex flex-col gap-2">
           <p class="font-semibold text-sm text-gray-140">
@@ -248,154 +308,128 @@ export const PoolPage = () => {
   );
 
   return (
-    <Page slim>
-      <ProfileFull />
-
-      <div class="flex flex-col gap-4">
-        <p class={headerClass}>Purchase membership with ICP</p>
-        <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
-          <Show when={mySubaccount()}>
-            <div class="flex flex-col gap-3">
-              <div class="flex flex-col gap-2">
-                <p class="font-semibold text-gray-140 text-sm">Send ICP here to deposit (1 ICP minimum)</p>
-
-                <div class="flex flex-col gap-1">
-                  <p class="font-semibold text-md">Account ID</p>
-                  <Copyable
-                    text={AccountIdentifier.fromPrincipal({
-                      principal: Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID),
-                      subAccount: SubAccount.fromBytes(mySubaccount()!) as SubAccount,
-                    }).toHex()}
-                    ellipsis={areWeOnMobile() ? true : false}
-                    ellipsisSymbols={areWeOnMobile() ? 30 : undefined}
-                  />
-                </div>
+    <Page>
+      <div class="flex flex-col gap-8 p-4 md:p-8">
+        {/* 数据统计卡片 */}
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-gray-400 mb-2">账户余额</h3>
+            <Show when={auth.isAuthorized() && auth.identity()}>
+              <div class="text-2xl font-bold text-white">
+                <BalanceOf
+                  tokenId={DEFAULT_TOKENS.icp}
+                  owner={auth.identity()!.getPrincipal()}
+                />
               </div>
-              <BalanceOf
-                tokenId={DEFAULT_TOKENS.icp}
-                owner={Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID)}
-                subaccount={mySubaccount()!}
-              />
-            </div>
-          </Show>
-          <div class="flex flex-col md:items-center gap-4">
-            <Btn
-              text="Satslink"
-              class="md:w-[200px]"
-              bgColor={COLORS.orange}
-              icon={EIconKind.FlameBW}
-              disabled={!canStake()}
-              onClick={() => setSatslinkModalVisible(true)}
-            />
-            <Show when={canWithdraw()}>
-              <p
-                class="underline font-normal text-gray-140 cursor-pointer text-center"
-                onClick={eventHandler(() => {
-                  setWithdrawModalVisible(true);
-                })}
-              >
-                Withdraw
-              </p>
             </Show>
           </div>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-4">
-        <p class={headerClass}>Unclaimed STK</p>
-        <div class="flex flex-col md:flex-row md:justify-between gap-10 md:gap-4">
-          <Show when={totals.data}>
-            <div class="flex flex-col gap-1">
-              <BalanceOf
-                tokenId={DEFAULT_TOKENS.satslink}
-                onRefreshOverride={fetchTotals}
-                balance={totals.data!.yourUnclaimedReward.toBigIntRaw()}
-              />
-              <p class="text-sm text-gray-140">Reward per Block: {myBlockCut()?.toString() ?? 0} SATSLINK</p>
-              <p class="text-sm text-gray-140">
-                Pool Share: {myShare()?.toPercent().toDecimals(4).toString() ?? 0}% (
-                {totals.data?.yourShareTcycles?.toString()} / {totals.data?.totalSharesSupply.toString()})
-              </p>
-            </div>
-
-            <div class="flex flex-col md:items-center gap-4">
-              <Btn
-                text="Claim"
-                icon={EIconKind.ArrowUpRight}
-                class="md:w-[200px]"
-                bgColor={COLORS.orange}
-                iconClass="rotate-180"
-                iconColor={COLORS.white}
-                disabled={!canClaimReward()}
-                onClick={() => setClaimModalVisible(true)}
-              />
-              <Show when={canClaimLost()}>
-                <p
-                  class="underline font-normal text-gray-140 cursor-pointer text-center"
-                  onClick={eventHandler(() => {
-                    setClaimLostModalVisible(true);
-                  })}
-                >
-                  Re-claim Lost
-                </p>
-              </Show>
-            </div>
-          </Show>
-        </div>
-      </div>
-
-      {/* <div class="flex flex-col gap-4">
-        <Show fallback={<p class={headerClass}>Satslink ICP to Continue</p>} when={totals.data && satslinkoutLeftoverBlocks()!}>
-          <div class="flex flex-row justify-between items-center gap-4">
-            <p class={headerClass}>Minting In Progress</p>
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-gray-400 mb-2">总质押量</h3>
+            <p class="text-2xl font-bold text-white">
+              {totals.data?.totalPledgeTokenSupply.toString() || "0"} ICP
+            </p>
           </div>
-          <p>
-            Enough fuel for {satslinkoutLeftoverBlocks()} blocks (approx.{" "}
-            {((totals.data!.posRoundDelayNs * BigInt(satslinkoutLeftoverBlocks()!)) / ONE_MIN_NS).toString()} minutes)
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <For
-              fallback={<p class="font-semibold text-xs text-gray-125">Satslink ICP to join the pool</p>}
-              each={Array(satslinkoutLeftoverBlocks()!).fill(0)}
-            >
-              {(_, idx) => {
-                return idx() < 100 || idx() === satslinkoutLeftoverBlocks()! - 1 ? (
-                  <Icon
-                    class={idx() === satslinkoutLeftoverBlocks() - 1 ? "animate-pulse" : undefined}
-                    kind={EIconKind.BlockFilled}
-                    color={COLORS.orange}
-                  />
-                ) : idx() === 100 ? (
-                  <p class="w-6 text-center">...</p>
-                ) : undefined;
-              }}
-            </For>
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-gray-400 mb-2">我的份额</h3>
+            <p class="text-2xl font-bold text-white">
+              {myShare()?.toString() || "0"} %
+            </p>
           </div>
-        </Show>
-      </div> */}
+          <div class="bg-gray-800 rounded-lg p-6">
+            <h3 class="text-gray-400 mb-2">未领取奖励</h3>
+            <p class="text-2xl font-bold text-orange">
+              {totals.data?.yourVipUnclaimedRewardE8s.toString() || "0"} SATSLINK
+            </p>
+          </div>
+        </div>
 
-      <Switch>
-        <Match when={withdrawModalVisible()}>
-          <Modal title="Withdraw ICP from Pool" onClose={handleWithdrawModalClose}>
+        {/* 操作按钮组 */}
+        <div class="flex flex-wrap gap-4">
+          <Btn
+            text="质押 ICP"
+            bgColor={COLORS.orange}
+            disabled={!canStake()}
+            onClick={() => setSatslinkModalVisible(true)}
+            class="flex-1 min-w-[200px]"
+          />
+          <Btn
+            text="提取 ICP"
+            bgColor={COLORS.gray[105]}
+            disabled={!canWithdraw()}
+            onClick={() => setWithdrawModalVisible(true)}
+            class="flex-1 min-w-[200px]"
+          />
+          <Btn
+            text="领取奖励"
+            bgColor={COLORS.orange}
+            disabled={!canClaimReward()}
+            onClick={() => setClaimModalVisible(true)}
+            class="flex-1 min-w-[200px]"
+          />
+        </div>
+
+        {/* 池子成员列表 */}
+        <div class="bg-gray-800 rounded-lg p-6">
+          <h2 class={headerClass + " mb-4"}>用户列表</h2>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="text-left text-gray-400">
+                  <th class="p-2">地址</th>
+                  <th class="p-2">到期时间</th>
+                  <th class="p-2">未领取奖励</th>
+                  <th class="p-2">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <For each={poolMembers()}>
+                  {(member) => (
+                    <tr class="border-t border-gray-700">
+                      <td class="p-2">
+                        <Copyable text={member.id.toText()} />
+                      </td>
+                      <td class="p-2">{new Date(Number(member.share)).toLocaleString()}</td>
+                      <td class="p-2">{member.unclaimedReward.toString()}</td>
+                      <td class="p-2">
+                        {member.isVerifiedViaDecideID ? (
+                          <span class="text-green-500">已验证</span>
+                        ) : (
+                          <span class="text-gray-400">未验证</span>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </For>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 现有的 Modal 组件 */}
+        <Show when={withdrawModalVisible()}>
+          <Modal title="提取 ICP" onClose={handleWithdrawModalClose}>
             {withdrawForm}
           </Modal>
-        </Match>
-        <Match when={satslinkModalVisible()}>
-          <Modal title="Satslink ICP in the Pool" onClose={handleSatslinkModalClose}>
+        </Show>
+
+        <Show when={satslinkModalVisible()}>
+          <Modal title="质押 ICP" onClose={handleSatslinkModalClose}>
             {satslinkForm}
           </Modal>
-        </Match>
-        <Match when={claimModalVisible()}>
-          <Modal title="Claim STK" onClose={handleClaimModalClose}>
+        </Show>
+
+        <Show when={claimModalVisible()}>
+          <Modal title="领取奖励" onClose={handleClaimModalClose}>
             {claimForm}
           </Modal>
-        </Match>
-        <Match when={claimLostModalVisible()}>
-          <Modal title="Claim Lost Tokens" onClose={handleClaimLostModalClose}>
+        </Show>
+
+        <Show when={claimLostModalVisible()}>
+          <Modal title="找回丢失资产" onClose={handleClaimLostModalClose}>
             {claimLostForm}
           </Modal>
-        </Match>
-      </Switch>
+        </Show>
+      </div>
     </Page>
   );
 };

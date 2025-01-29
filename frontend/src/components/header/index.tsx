@@ -23,7 +23,7 @@ export function Header(props: IHeaderProps) {
   const [authModalVisible, setAuthModalVisible] = createSignal(false);
 
   const handleAuth = async (provider: TAuthProvider) => {
-    if (areWeOnMobile() && provider === "MSQ") {
+    if (areWeOnMobile() && provider === "STL") {
       logErr(ErrorCode.AUTH, "Mobile Not Supported!");
       return;
     }
@@ -42,7 +42,7 @@ export function Header(props: IHeaderProps) {
   const selectAuthProviderForm = (
     <div class="flex flex-col gap-4">
       <Btn
-        text="MSQ - MetaMask"
+        text="STL - MetaMask"
         icon={EIconKind.MetaMask}
         class="rounded-full h-[50px] self-stretch text-black font-semibold"
         onClick={() => handleAuth("MSQ")}
