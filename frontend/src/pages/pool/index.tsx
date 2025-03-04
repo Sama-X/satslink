@@ -30,14 +30,11 @@ import { batch, createEffect, createResource, createSignal, For, Match, on, onMo
 export const PoolPage = () => {
   const auth = useAuth();
   const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf, claimLost, canClaimLost } = useTokens();
-  const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, claimReward, poolMembers, fetchPoolMembers } = useSatslinker();
+  // const { canWithdraw, canStake, totals, fetchTotals, canClaimReward, withdraw, stake, claimReward, poolMembers, fetchPoolMembers } = useSatslinker();
+  const { paymentsStore, myPayments, paymentUserCount, fetchAllPayments, fetchMyPayments, fetchPaymentUserCount, canPay, pay, fetchPaymentsByEthAddress } = useSatslinker();
   const navigate = useNavigate();
 
-  const [withdrawModalVisible, setWithdrawModalVisible] = createSignal(false);
   const [satslinkModalVisible, setSatslinkModalVisible] = createSignal(false);
-  const [claimModalVisible, setClaimModalVisible] = createSignal(false);
-  const [claimLostModalVisible, setClaimLostModalVisible] = createSignal(false);
-  const [recepient, setRecepient] = createSignal(Result.Err<string>(""));
   const [stakeAmount, setStakeAmount] = createSignal(Result.Err<number>(0));
   const [ethAddress, setEthAddress] = createSignal("");
 
@@ -54,55 +51,45 @@ export const PoolPage = () => {
     return subaccounts[p.toText()];
   };
 
-  const satslinkoutLeftoverBlocks = () => {
-    const t = totals.data;
-    if (!t) return 0;
-
-    return Number(t.yourShareTcycles.div(t.currentBlockShareFee).toBigIntBase());
-  };
-
-  const myShare = () => {
-    const t = totals.data;
-    if (!t) return undefined;
-
-    if (!t.totalSharesSupply.toBool()) return undefined;
-
-    return t.yourShareTcycles.div(t.totalSharesSupply);
-  };
-
-  const myBlockCut = () => {
-    const t = totals.data;
-    if (!t) return undefined;
-
-    if (!t.totalSharesSupply.toBool()) return undefined;
-
-    return t.currentSatslinkTokenReward
-      .toDynamic()
-      .toDecimals(12)
-      .mul(t.yourShareTcycles)
-      .div(t.totalSharesSupply)
-      .toDecimals(8)
-      .toE8s();
-  };
-
   onMount(async () => {
     if (!auth.isAuthorized()) {
       navigate(ROOT.path);
       return;
     }
 
+    // 调用支付相关接口获取数据
     fetchSubaccountOf(myPrincipal()!);
-    fetchPoolMembers();
-    
+    await fetchAllPayments();
+    // await fetchMyPayments();
+    // fetchPaymentUserCount();
+
     // 获取 ETH 地址
-    const address = await auth.getEthAddress();
-    if (address) {
-      setEthAddress(bytesToHex(new Uint8Array(address)));
-    }
+    // const address = await auth.getEthAddress();
+    // if (address) {
+    //   setEthAddress(bytesToHex(new Uint8Array(address)));
+    // }
+    // 打印获取到的支付数据
+    console.log("Fetched payment stats:", paymentsStore.allPayments);
+  });
+
+  createEffect(() => {
+    console.log("Current paymentsStore.allPayments:", paymentsStore.allPayments);
   });
 
   createEffect(
+    on(auth.isAuthorized, async (isAuthorized) => {
+      if (isAuthorized) {
+        const address = await auth.getEthAddress();
+        if (address) {
+          setEthAddress(bytesToHex(new Uint8Array(address)));
+        }
+      }
+    })
+  );
+
+  createEffect(
     on(auth.isAuthorized, (ready) => {
+
       if (!ready) {
         navigate(ROOT.path);
       }
@@ -119,38 +106,6 @@ export const PoolPage = () => {
 
   const headerClass = "font-semibold text-2xl";
 
-  const handleWithdrawModalClose = () => {
-    batch(() => {
-      setRecepient(Result.Err<string>(""));
-      setWithdrawModalVisible(false);
-    });
-  };
-
-  const handleWithdraw = async () => {
-    await withdraw(Principal.fromText(recepient().unwrapOk()));
-    handleWithdrawModalClose();
-  };
-
-  const withdrawForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Are you sure you want to withdraw all ICP from the Pool?</p>
-        <div class="flex flex-col gap-2">
-          <p class="font-semibold text-sm text-gray-140">
-            Recepient Principal ID <span class="text-errorRed">*</span>
-          </p>
-          <TextInput
-            placeholder={import.meta.env.VITE_SATSLINKER_CANISTER_ID}
-            validations={[{ principal: null }, { required: null }]}
-            value={recepient().unwrap()}
-            onChange={setRecepient}
-          />
-        </div>
-      </div>
-      <Btn text="Confirm" bgColor={COLORS.orange} disabled={recepient().isErr()} onClick={handleWithdraw} />
-    </div>
-  );
-
   const handleSatslinkModalClose = () => {
     batch(() => {
       setStakeAmount(Result.Err<number>(0));
@@ -159,26 +114,32 @@ export const PoolPage = () => {
   };
 
   const handleSatslink = async () => {
-    const amount = stakeAmount().unwrapOk();
+    // const amount = stakeAmount().unwrapOk();
+    // if (amount < 0.5) {
+    //   return;
+    // }
+    // await stake();
+
+    const amount = BigInt(parseFloat(stakeAmount().unwrapOk().toString()));
     if (amount < 0.5) {
       return;
     }
-    await stake();
+    await pay(amount, ethAddress(), DEFAULT_TOKENS.icp.toText());
     handleSatslinkModalClose();
   };
 
   const satslinkForm = (
     <div class="flex flex-col gap-8">
       <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">请输入要质押的 ICP 数量：</p>
+        <p class="font-normal text-lg text-white">请输入支付的 ICP 数量：</p>
         <div class="flex flex-col gap-2">
           <p class="font-semibold text-sm text-gray-140">
-            质押数量 <span class="text-errorRed">*</span>
-            <span class="text-gray-400 text-xs ml-2">(最小质押数量: 0.5 ICP)</span>
+            支付数量 <span class="text-errorRed">*</span>
+            <span class="text-gray-400 text-xs ml-2">(最小支付数量: 0.5 ICP)</span>
           </p>
           <QtyInput
             value={stakeAmount().unwrap()}
-            onChange={setStakeAmount}
+            onChange={(value)=> {setStakeAmount(value);}}
             symbol="ICP"
             validations={[
               { required: null },
@@ -191,11 +152,13 @@ export const PoolPage = () => {
           <p class="font-semibold text-sm text-gray-140">
             ETH 地址
           </p>
-          <div class="bg-gray-900 rounded p-3 break-all text-gray-300 font-mono text-sm">
-            {ethAddress() || "未获取到 ETH 地址"}
-          </div>
+          <TextInput
+            placeholder="编辑 ETH 地址"
+            value={ethAddress()}
+            onChange={setEthAddress}
+          />
           <p class="text-xs text-gray-400">
-            这是您授权账户关联的 ETH 地址
+            这是您授权账户关联的 ETH 地址，您可以编辑修改
           </p>
         </div>
 
@@ -205,105 +168,29 @@ export const PoolPage = () => {
           </p>
           <BalanceOf
             tokenId={DEFAULT_TOKENS.icp}
-            owner={Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID)}
-            subaccount={mySubaccount()!}
+            owner={myPrincipal()!}
+            subaccount={mySubaccount()}
           />
         </div>
 
         <p class="font-semibold text-orange mt-4">
-          质押操作需要一定时间，请耐心等待交易完成。
+          支付操作需要一定时间，请耐心等待交易完成。
         </p>
       </div>
       <div class="flex gap-2">
-        <Btn text="取消" class="flex-grow" bgColor={COLORS.gray[105]} onClick={handleSatslinkModalClose} />
+        <Btn text="取消" 
+          class="flex-grow" 
+          bgColor={COLORS.gray[105]} 
+          onClick={handleSatslinkModalClose} 
+        />
         <Btn 
-          text="确认质押" 
+          text="确认支付" 
           class="flex-grow" 
           bgColor={COLORS.orange} 
           onClick={handleSatslink}
-          disabled={stakeAmount().isErr() || !ethAddress()} 
+          disabled={stakeAmount().isErr() || !ethAddress() || stakeAmount().unwrap() < 0.5} 
         />
       </div>
-    </div>
-  );
-
-  const handleClaimModalClose = () => {
-    batch(() => {
-      setRecepient(Result.Err<string>(""));
-      setClaimModalVisible(false);
-    });
-  };
-
-  const handleClaim = async () => {
-    await claimReward(Principal.fromText(recepient().unwrapOk()));
-    handleClaimModalClose();
-  };
-
-  const claimForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Mint all unclaimed SATSLINK tokens?</p>
-        <div class="flex flex-col gap-2">
-          <p class="font-normal text-sm text-white">
-            $SATSLINK is supported by an absolute majority of wallets. We still would like to kindly ask you to{" "}
-            <span class="font-bold">check if the wallet you send to supports $SATSLINK</span>.
-          </p>
-          <p class="font-semibold text-sm text-gray-140">
-            Recepient Principal ID <span class="text-errorRed">*</span>
-          </p>
-          <TextInput
-            placeholder={import.meta.env.VITE_SATSLINKER_CANISTER_ID}
-            validations={[{ principal: null }, { required: null }]}
-            value={recepient().unwrap()}
-            onChange={setRecepient}
-          />
-        </div>
-      </div>
-      <Btn text="Confirm" bgColor={COLORS.orange} disabled={recepient().isErr()} onClick={handleClaim} />
-    </div>
-  );
-
-  const handleClaimLostModalClose = () => {
-    batch(() => {
-      setRecepient(Result.Err<string>(""));
-      setClaimLostModalVisible(false);
-    });
-  };
-
-  const handleClaimLost = async () => {
-    auth.assertAuthorized();
-
-    await claimLost(Principal.fromText(recepient().unwrapOk()));
-
-    handleClaimLostModalClose();
-  };
-
-  const claimLostForm = (
-    <div class="flex flex-col gap-8">
-      <div class="flex flex-col gap-4">
-        <p class="font-normal text-lg text-white">Your lost assets we were able to find:</p>
-        <div class="flex flex-col gap-2">
-          <BalanceOf tokenId={DEFAULT_TOKENS.satslink} owner={auth.identity()?.getPrincipal()} />
-          <BalanceOf tokenId={DEFAULT_TOKENS.icp} owner={auth.identity()?.getPrincipal()} />
-        </div>
-        <div class="flex flex-col gap-2">
-          <p class="font-semibold text-sm text-gray-140">
-            Recepient Principal ID <span class="text-errorRed">*</span>
-          </p>
-          <TextInput
-            placeholder={import.meta.env.VITE_SATSLINKER_CANISTER_ID}
-            validations={[{ principal: null }, { required: null }]}
-            value={recepient().unwrap()}
-            onChange={setRecepient}
-          />
-        </div>
-      </div>
-      <Btn
-        text="Re-claim Lost Assets"
-        bgColor={COLORS.orange}
-        disabled={recepient().isErr() || !canClaimLost()}
-        onClick={handleClaimLost}
-      />
     </div>
   );
 
@@ -311,61 +198,67 @@ export const PoolPage = () => {
     <Page>
       <div class="flex flex-col gap-8 p-4 md:p-8">
         {/* 数据统计卡片 */}
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="bg-gray-800 rounded-lg p-6">
-            <h3 class="text-gray-400 mb-2">账户余额</h3>
-            <Show when={auth.isAuthorized() && auth.identity()}>
-              <div class="text-2xl font-bold text-white">
-                <BalanceOf
-                  tokenId={DEFAULT_TOKENS.icp}
-                  owner={auth.identity()!.getPrincipal()}
-                />
-              </div>
-            </Show>
-          </div>
-          <div class="bg-gray-800 rounded-lg p-6">
-            <h3 class="text-gray-400 mb-2">总质押量</h3>
+            <h3 class="text-gray-400 mb-2">总支付</h3>
             <p class="text-2xl font-bold text-white">
-              {totals.data?.totalPledgeTokenSupply.toString() || "0"} ICP
+              {
+                paymentsStore.allPayments?.Ok
+                ? (console.log("总支付:", paymentsStore.allPayments.Ok.total_usd_value_all_users),
+                   paymentsStore.allPayments.Ok.total_usd_value_all_users)
+                : "加载中..."
+              } $
             </p>
           </div>
-          <div class="bg-gray-800 rounded-lg p-6">
-            <h3 class="text-gray-400 mb-2">我的份额</h3>
-            <p class="text-2xl font-bold text-white">
-              {myShare()?.toString() || "0"} %
-            </p>
-          </div>
-          <div class="bg-gray-800 rounded-lg p-6">
-            <h3 class="text-gray-400 mb-2">未领取奖励</h3>
-            <p class="text-2xl font-bold text-orange">
-              {totals.data?.yourVipUnclaimedRewardE8s.toString() || "0"} SATSLINK
-            </p>
-          </div>
+          {auth.isAuthorized() && (
+            <>
+            <div class="bg-gray-800 rounded-lg p-6">
+              <h3 class="text-gray-400 mb-2">我的支付</h3>
+              <p class="text-2xl font-bold text-white">
+                {
+                  paymentsStore.allPayments?.Ok 
+                    ? (console.log("我的支付:", paymentsStore.allPayments.Ok.total_usd_value_user),
+                       paymentsStore.allPayments.Ok.total_usd_value_user)
+                    : "加载中..."
+                } $
+              </p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6">
+              <h3 class="text-gray-400 mb-2">截止时间</h3>
+              <p class="text-2xl font-bold text-orange">
+                {
+                  paymentsStore.allPayments?.Ok && paymentsStore.allPayments.Ok.user_payments?.length > 0
+                    ? (() => {
+                      const maxExpiryTime = paymentsStore.allPayments.Ok.user_vip_expiry;
+                      console.log("用户到期时间:", maxExpiryTime);
+                      const expiryTime = new Date(Number(maxExpiryTime)/ 1_000_000);
+                      console.log("转换后的时间:", expiryTime);
+                      const month = String(expiryTime.getMonth() + 1).padStart(2, '0');
+                      console.log("月:", month);
+                      const day = String(expiryTime.getDate()).padStart(2, '0');
+                      console.log("日:", day);
+                      const year = expiryTime.getFullYear();
+                      console.log("年:", year);
+                      return `${month}-${day}-${year}`;
+                    })()
+                    : "00-00-1900"
+                }
+              </p>
+            </div>
+            </>
+          )}
         </div>
 
         {/* 操作按钮组 */}
         <div class="flex flex-wrap gap-4">
           <Btn
-            text="质押 ICP"
+            text="支付 ICP"
             bgColor={COLORS.orange}
-            disabled={!canStake()}
+            disabled={!canPay()}
             onClick={() => setSatslinkModalVisible(true)}
             class="flex-1 min-w-[200px]"
           />
-          <Btn
-            text="提取 ICP"
-            bgColor={COLORS.gray[105]}
-            disabled={!canWithdraw()}
-            onClick={() => setWithdrawModalVisible(true)}
-            class="flex-1 min-w-[200px]"
-          />
-          <Btn
-            text="领取奖励"
-            bgColor={COLORS.orange}
-            disabled={!canClaimReward()}
-            onClick={() => setClaimModalVisible(true)}
-            class="flex-1 min-w-[200px]"
-          />
+          {/* <p>{`canPay: ${canPay()}`}</p> 调试输出 */}
         </div>
 
         {/* 池子成员列表 */}
@@ -375,29 +268,43 @@ export const PoolPage = () => {
             <table class="w-full">
               <thead>
                 <tr class="text-left text-gray-400">
-                  <th class="p-2">地址</th>
+                  <th class="p-2">创建时间</th>
+                  <th class="p-2">账号</th>
+                  <th class="p-2">ETH地址</th>
                   <th class="p-2">到期时间</th>
-                  <th class="p-2">未领取奖励</th>
                   <th class="p-2">状态</th>
                 </tr>
               </thead>
               <tbody>
-                <For each={poolMembers()}>
-                  {(member) => (
-                    <tr class="border-t border-gray-700">
-                      <td class="p-2">
-                        <Copyable text={member.id.toText()} />
-                      </td>
-                      <td class="p-2">{new Date(Number(member.share)).toLocaleString()}</td>
-                      <td class="p-2">{member.unclaimedReward.toString()}</td>
-                      <td class="p-2">
-                        {member.isVerifiedViaDecideID ? (
-                          <span class="text-green-500">已验证</span>
-                        ) : (
-                          <span class="text-gray-400">未验证</span>
-                        )}
-                      </td>
-                    </tr>
+              <For each={paymentsStore.allPayments?.Ok?.all_payments}>
+                  {(payment) => (
+                      <tr class="border-t border-gray-700">
+                        <td class="p-2">{(() => {
+                          const paymentCreateTimestamp = Number(payment.payment_create) / 1_000_000;
+                          const expiryTime = new Date(paymentCreateTimestamp);
+                          const year = expiryTime.getFullYear();
+                          const month = String(expiryTime.getMonth() + 1).padStart(2, '0'); // 月份从 0 开始，需要 +1
+                          const day = String(expiryTime.getDate()).padStart(2, '0');
+                          console.log("用户支付创建时间:", payment.payment_create, "year:", year, "month:", month, "day:", day);
+                          return `${year}-${month}-${day}`;
+                        })()}</td> {/* 到期时间 */}
+                        <td class="p-2">
+                          <Copyable text={payment.principal.toText()} /> {/* 账号 */}
+                        </td>
+                        <td class="p-2">{payment.eth_address}</td> {/* ETH 地址 */}
+                        <td class="p-2">{(() => {
+                          const expiryTimeTimestamp = Number(payment.expiry_time) / 1_000_000;
+                          const expiryTime = new Date(expiryTimeTimestamp);
+                          const year = expiryTime.getFullYear();
+                          const month = String(expiryTime.getMonth() + 1).padStart(2, '0'); // 月份从 0 开始，需要 +1
+                          const day = String(expiryTime.getDate()).padStart(2, '0');
+                          console.log("用户支付到期时间:", payment.expiry_time, "year:", year, "month:", month, "day:", day);
+                          return `${year}-${month}-${day}`;
+                        })()}</td> {/* 到期时间 */}
+                        <td class="p-2">
+                          <span class="text-green-500">VIP</span> {/* 状态设置为 VIP */}
+                        </td>
+                      </tr>
                   )}
                 </For>
               </tbody>
@@ -406,27 +313,9 @@ export const PoolPage = () => {
         </div>
 
         {/* 现有的 Modal 组件 */}
-        <Show when={withdrawModalVisible()}>
-          <Modal title="提取 ICP" onClose={handleWithdrawModalClose}>
-            {withdrawForm}
-          </Modal>
-        </Show>
-
         <Show when={satslinkModalVisible()}>
-          <Modal title="质押 ICP" onClose={handleSatslinkModalClose}>
+          <Modal title="支付 ICP" onClose={handleSatslinkModalClose}>
             {satslinkForm}
-          </Modal>
-        </Show>
-
-        <Show when={claimModalVisible()}>
-          <Modal title="领取奖励" onClose={handleClaimModalClose}>
-            {claimForm}
-          </Modal>
-        </Show>
-
-        <Show when={claimLostModalVisible()}>
-          <Modal title="找回丢失资产" onClose={handleClaimLostModalClose}>
-            {claimLostForm}
           </Modal>
         </Show>
       </div>

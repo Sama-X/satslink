@@ -1,426 +1,419 @@
-
-
-use candid::{Nat, Principal};
+use candid::{CandidType, Deserialize, Nat, Principal};
+use std::cell::RefCell;
 use ic_cdk::api::time;
+use ic_cdk_timers::set_timer;
+use std::time::Duration;
 use ic_cdk::{
-    caller, 
-    export_candid, 
-    init, 
-    post_upgrade, 
-    query, 
+    caller,
+    id,
+    export_candid,
+    init,
+    post_upgrade,
+    query,
     update,
     println,
 };
 
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    account::Subaccount,
-    transfer::TransferArg,
-};
-use ic_e8s::c::E8s;
-//use ic_ledger_types::Subaccount;
-
 use shared::{
-    satslinker::{
-        api::{
-            ClaimRewardRequest, 
-            ClaimRewardResponse, 
-            GetTotalsResponse, 
-            GetVIPuserResponse,
-            MigrateAccountRequest, 
-            MigrateAccountResponse,
-            RefundLostTokensRequest, 
-            RefundLostTokensResponse, 
-            StakeRequest, 
-            StakeResponse,
-            LotteryRequest,
-            LotteryResponse,
-            PledgeRequest, 
-            PledgeResponse, 
-            RedeemRequest,
-            RedeemResponse
-        },
-            types::TCycles,
-            types::Address,
-            types::VIP_ROUND_DELAY_NS,
-    },
     icrc1::ICRC1CanisterClient,
-    ENV_VARS,
-    MIN_ICP_STAKE_E8S_U64,
-    MIN_STL_LOTTERY_E8S_U64,
-    ONE_MINUTE_NS,
-    ONE_MONTH_NS,
+    ICP_FEE,
 };
 
-use utils::{
-    assert_caller_is_dev, 
-    assert_running, 
-    lottery_running,
-    set_init_seed_one_timer,
-    set_cycles_icp_exchange_rate_timer,
-    set_icp_redistribution_timer,
-    set_lottery_and_pos_and_pledge_timer,
-    stake_callers_icp_for_redistribution,
-    STATE, 
-    STOPPED_FOR_UPDATE,
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc1::account::Subaccount,
+    icrc2::transfer_from::TransferFromArgs,
+    icrc2::allowance::AllowanceArgs,
 };
 
-mod utils;
+use std::collections::HashSet;
+const ICP_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 
-// #[update]
-// async fn withdraw(req: WithdrawRequest) -> WithdrawResponse {
-//     assert_running();
+// 引入持久化存储
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{DefaultMemoryImpl, StableVec, Storable};
 
-//     let c = caller();
-//     let icp_can = ICRC1CanisterClient::new(ENV_VARS.icp_token_canister_id);
+// 定义 Memory 类型
+type Memory = VirtualMemory<DefaultMemoryImpl>;
 
-//     icp_can.icrc1_transfer(TransferArg {
-//             from_subaccount: Some(subaccount_of(c)),
-//             to: Account {
-//                 owner: req.to,
-//                 subaccount: None,
-//             },
-//             amount: Nat(req.qty_e8s.val),
-//             fee: None,
-//             created_at_time: None,
-//             memo: None,
-//         })
-//         .await
-//         .expect("Unable to call ICP canister")
-//         .0
-//         .expect("Unable to transfer ICP");
-
-//     WithdrawResponse {}
-// }
-
-#[update]
-async fn purchase(req: StakeRequest) -> StakeResponse {
-    assert_running();
-
-    if req.qty_e8s_u64 < MIN_ICP_STAKE_E8S_U64 {
-        panic!("At least 0.5 ICP is required to participate");
+// 定义 PaymentRecord 的存储方式
+impl Storable for PaymentRecord {
+    const BOUND: ic_stable_structures::storable::Bound = ic_stable_structures::storable::Bound::Bounded { max_size: 1024, is_fixed_size: false };
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
+        std::borrow::Cow::Owned(candid::encode_one(self).unwrap())
     }
 
-    let stake_result = stake_callers_icp_for_redistribution(req.qty_e8s_u64)
-        .await
-        .expect("Unable to stake ICP");
-
-    let staked_icps_e12s = E8s::from(req.qty_e8s_u64)
-        .to_dynamic()
-        .to_decimals(12)
-        .to_const::<12>();
-
-    STATE.with_borrow_mut(|s| {
-        let cycles_rate = s.get_info().get_icp_to_cycles_exchange_rate();
-        let cycles_share = staked_icps_e12s * cycles_rate;
-        let time_in_minutes = cycles_share.clone() / TCycles::from(1000u64); // Convert 1,000 cycles to 1 minute
-
-        // Get current timestamp in seconds
-        let current_time = time() / VIP_ROUND_DELAY_NS;
-        let expiration_time = current_time + time_in_minutes.val.bits() * ONE_MINUTE_NS / VIP_ROUND_DELAY_NS; // Calculate expiration timestamp in seconds
-
-         println!("Expiration time: {:?} Converted to cycles: {:?}", expiration_time, cycles_share.val);
-         s.mint_vip_share(expiration_time, caller(), req.address); 
-    });
-
-    StakeResponse {result: Ok(Nat::from(req.qty_e8s_u64)), message: format!("{}", stake_result)}
-}
-
-#[update]
-async fn play_lottery(req: LotteryRequest) -> LotteryResponse {
-    // Implement async logic
-    assert_running();
-
-    if req.qty_e8s_u64 < MIN_STL_LOTTERY_E8S_U64 {
-        panic!("At least 1 STL is required to participate");
+    fn from_bytes(bytes: std::borrow::Cow<'_, [u8]>) -> Self {
+        candid::decode_one(&bytes).unwrap()
     }
-    
-    lottery_running(req.qty_e8s_u64, caller());
-
-    LotteryResponse {}
 }
 
+thread_local! {
+    static ICP_PRICE: RefCell<Option<f64>> = RefCell::new(None); // 存储 ICP 价格
+    static ADMIN: RefCell<Principal> = RefCell::new(Principal::anonymous());
+    // 白名单 (存储允许的 canister ID)
+    static WHITELISTED_TOKENS: RefCell<HashSet<Principal>> = RefCell::new(HashSet::new());
+    // 初始化 MemoryManager
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
+    // 使用 StableVec 存储支付记录
+    static PAYMENTS: RefCell<StableVec<PaymentRecord, Memory>> =
+        RefCell::new(StableVec::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
+    ).expect("Failed to initialize StableVec"));
+}
+
+#[derive(CandidType, Clone, Deserialize, Debug)]
+pub struct PaymentRecord {
+    pub principal: Principal,
+    pub amount: Nat,
+    pub expiry_time: u64,
+    pub eth_address: String,
+    pub canister_id: String, // 存储 canister ID
+    pub payment_create: u64,
+}
+
+// 新增：PaymentStats 结构体
+#[derive(CandidType, Deserialize, Debug)]
+pub struct PaymentStats {
+    pub total_usd_value_all_users: f64,
+    pub total_usd_value_user: f64,
+    pub all_payments: Vec<PaymentRecord>,
+    pub user_payments: Vec<PaymentRecord>,
+    pub user_vip_expiry: u64, // 新增：用户VIP截止时间
+    pub user_total_amount: Nat, // 新增：用户金额
+}
+
+thread_local! {
+    pub static STOPPED_FOR_UPDATE: RefCell<(Principal, bool)> = RefCell::new((Principal::anonymous(), false));
+}
+
+pub fn is_stopped() -> bool {
+    STOPPED_FOR_UPDATE.with_borrow(|(_, is_stopped)| *is_stopped)
+}
+
+// 获取 ICP 价格（从存储中读取）
+#[query]
+pub fn get_icp_price() -> Result<f64, String> {
+    ICP_PRICE.with(|price| {
+        match *price.borrow() {
+            Some(p) => Ok(p),
+            None => Err("ICP price not set".to_string()), // 或返回一个默认值
+        }
+    })
+}
+
+// 设置 ICP 价格（仅管理员）
 #[update]
-async fn pledge(req: PledgeRequest) -> PledgeResponse { 
-    assert_running();
+pub fn set_icp_price(price: f64) -> Result<(), String> {
+    ADMIN.with(|admin| {
+        if caller() != *admin.borrow() {
+            return Err("Unauthorized".to_string());
+        }
+        ICP_PRICE.with(|p| *p.borrow_mut() = Some(price));
+        Ok(())
+    })
+}
 
-    let caller_id = caller();
-    let satslink_amount = E8s::from(req.qty_e8s_u64);
+// 白名单操作枚举
+#[derive(CandidType, Deserialize, Debug)]
+pub enum WhitelistOperation {
+    Add,
+    Remove,
+    Check,
+}
 
-    STATE.with_borrow_mut(|s| {
-        s.pledge_shares.get(&caller_id).clone().unwrap_or((E8s::zero(), 0u64, E8s::zero()))
-    });
+// 白名单管理函数 (整合 is_whitelisted, add_to_whitelist, remove_from_whitelist)
+#[update]
+pub fn manage_whitelist(canister_id_str: String, operation: WhitelistOperation) -> Result<bool, String> {
+    let canister_id = Principal::from_text(&canister_id_str)
+        .map_err(|e| format!("Invalid canister ID: {:?}", e))?;
 
-    let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
-
-    // Transfer SATSLINK tokens to issuer account
-    let transfer_result = satslink_token_can
-        .icrc1_transfer(TransferArg {
-            to: Account {
-                owner: ENV_VARS.satslink_token_canister_id,
-                subaccount: None,
-            },
-            amount: Nat(satslink_amount.clone().val),
-            from_subaccount: None,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-        })
-        .await;
-
-    // Handle transfer result
-    match transfer_result {
-        Ok((Ok(_),)) => { // Successful transfer
-            let current_time = time() / VIP_ROUND_DELAY_NS; // Get current time
-            // Update pledge record
-            STATE.with_borrow_mut(|s| {
-                s.mint_pledge_share(satslink_amount.clone(), current_time, caller_id); 
-            });
-
-            // Return success response
-            PledgeResponse {}
-        },
-        Ok((Err(e),)) => { // Transfer failed
-            // Log error or handle error here
-            eprintln!("Transfer failed: {:?}", e);
-            PledgeResponse {}
-        },
-        Err(e) => { // Error occurred during transfer call
-            // Log error or handle error here
-            eprintln!("Transfer call error: {:?}", e);
-            PledgeResponse {}
+    match operation {
+        WhitelistOperation::Add => {
+            ADMIN.with(|admin| {
+                if caller() != *admin.borrow() {
+                    return Err("Unauthorized".to_string());
+                }
+                WHITELISTED_TOKENS.with(|whitelist| whitelist.borrow_mut().insert(canister_id));
+                Ok(true)
+            })
+        }
+        WhitelistOperation::Remove => {
+            ADMIN.with(|admin| {
+                if caller() != *admin.borrow() {
+                    return Err("Unauthorized".to_string());
+                }
+                WHITELISTED_TOKENS.with(|whitelist| whitelist.borrow_mut().remove(&canister_id));
+                Ok(true)
+            })
+        }
+        WhitelistOperation::Check => {
+            let is_whitelisted = WHITELISTED_TOKENS.with(|whitelist| whitelist.borrow().contains(&canister_id));
+            Ok(is_whitelisted)
         }
     }
 }
 
+/// 支付接口，实现数据持久化保存支付记录
 #[update]
-async fn redeem(req: RedeemRequest) -> RedeemResponse {
-    assert_running();
+pub async fn pay(
+    principal: Principal,
+    amount: Nat,
+    eth_address: String,
+    canister_id: String,
+) -> Result<(), String> {
+    let token_id = Principal::from_text(&canister_id)
+        .map_err(|e| format!("Invalid canister ID: {:?}", e))?;
 
-    let caller_id = caller();
-    //let info = STATE.with_borrow_mut(|s| s.get_info());
-
-    // Check if user has pledge record
-    let (cur_satslink_share, pledge_satslink_time, _) = STATE.with_borrow_mut(|s| {
-        s.pledge_shares.get(&caller_id).clone().unwrap_or((E8s::zero(), 0u64, E8s::zero()))
-    });
-
-    // Get current time
-    let current_time = time() / VIP_ROUND_DELAY_NS; 
-    // Check if pledge time has reached
-    if current_time < (pledge_satslink_time + ONE_MONTH_NS) / VIP_ROUND_DELAY_NS {
-        return RedeemResponse { result: Err("Tokens are still locked. Please wait until the lock period ends.".to_string()) };
+    if !manage_whitelist(canister_id.clone(), WhitelistOperation::Check)? {
+        return Err("Canister ID is not whitelisted".to_string());
     }
 
-    // Initialize token canister client
-    let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
+    let satslink_icp_can = ICRC1CanisterClient::new(token_id);
 
-    // Transfer SATSLINK tokens to user
-    let res = satslink_token_can
-        .icrc1_transfer(TransferArg {
-            to: Account {
-                owner: req.to, // User's account
-                subaccount: None,
-            },
-            amount: Nat(cur_satslink_share.clone().val), // User's pledged amount
-            from_subaccount: None,
-            fee: None,
-            created_at_time: None,
-            memo: None,
+    let token_allowance = match satslink_icp_can
+        .icrc2_allowance(AllowanceArgs {
+            account: Account::from(caller()),
+            spender: Account::from(id()),
         })
         .await
-        .map_err(|e| format!("{:?}", e))
-        .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
-    
-    match res {
-        Ok(r) => match r {
-            Ok(_) => {
-                STATE.with_borrow_mut(|s| {
-                    s.pledge_shares.remove(&caller_id);
-                    s.get_info().total_pledge_token_supply -= &cur_satslink_share;
-                });
-                return RedeemResponse { result: Ok(Nat::from(cur_satslink_share.clone().val)) }; // Use cur_satslink_share
-            },
-            Err(e) => {   
-                return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // Return response
-            }
-        },
+    {
+        Ok(allowance) => allowance,
         Err(e) => {
-            return RedeemResponse { result: Err(format!("Transfer failed: {:?}", e)) } // Return response
+            println!("Error in allowance: {:?}", e);
+            return Err(format!("Error in allowance: {:?}", e));
+        }
+    };
+
+    println!(
+        "token allowance: {:?}, token amount: {:?}, fee amount: {:?}",
+        token_allowance, amount, ICP_FEE
+    );
+
+    // 正确处理异步调用和 Result
+    match satslink_icp_can
+        .icrc2_transfer_from(TransferFromArgs {
+            spender_subaccount: None,
+            from: Account {
+                owner: caller(),
+                subaccount: None,
+            },
+            to: Account {
+                owner: id(),
+                subaccount: None,
+            },
+            amount: amount.clone(),
+            fee: Some(Nat::from(ICP_FEE)),
+            memo: None,
+            created_at_time: None,
+        })
+        .await
+    {
+        Ok((v,)) => { // 解构单元组，获取内部的 Result
+            match v { // 再次 match 内部的 Result
+                Ok(nat_val) => { // nat_val 的类型是 Nat
+                    if nat_val > Nat::from(0u64) {
+                        let icp_price = get_icp_price()?;
+                        let icp_canister_id = Principal::from_text(ICP_CANISTER_ID).unwrap();
+                        let amount_f64 = amount.0.to_string().parse::<f64>().unwrap() / 100_000_000.0;
+                        let usd_value = if token_id == icp_canister_id {
+                            amount_f64 * icp_price
+                        } else {
+                            amount_f64
+                        };
+                        let months_of_vip = usd_value / 5.0;
+                        let seconds_of_vip = months_of_vip * 30.0 * 24.0 * 60.0 * 60.0 * 1_000_000_000.0;
+                        
+                        let expiry_time = time()  + seconds_of_vip as u64;
+                        let payment_record = PaymentRecord {
+                            principal,
+                            amount: amount.clone(),
+                            expiry_time,
+                            eth_address,
+                            canister_id: canister_id.clone(),
+                            payment_create: time(),
+                        };
+                        PAYMENTS.with(|payments| {
+                            let payments_mut = payments.borrow_mut();
+                            let len = payments_mut.len();
+                            if (len as u64) < 1000 {
+                                payments_mut.push(&payment_record).expect("Failed to push payment record");
+                            }
+                        });
+                        println!(
+                            "Payment record updated/created successfully. Transfer result: value = {:?}, amount = {:?}, canister = {:?}, caller = {:?}",
+                            amount,
+                            nat_val,
+                            canister_id,
+                            caller().to_text()
+                        );
+                    } else {
+                        println!("Transfer failed: value is not valid.");
+                        return Err("Transfer failed: value is not valid.".to_string());
+                    }
+                }
+                Err(e) => {
+                    println!("Transfer failed: {:?}", e);
+                    return Err(format!("Transfer failed (decoded): {:?}", e));
+                }
+            }
+        }
+        Err(e) => {
+            println!("Transfer failed: {:?}", e);
+            return Err(format!("Transfer failed (decoded): {:?}", e));
         }
     }
+
+    Ok(())
 }
 
-#[update]
-async fn claim_pledge_reward(req: ClaimRewardRequest) -> ClaimRewardResponse {
-    assert_running();
-   
-    let c: Principal = caller();
+/// 获取支付统计信息 (整合 get_total_usd_value_user 和 get_total_usd_value_all_users)
+#[query]
+pub fn get_payment_stats() -> Result<PaymentStats, String> {
+    let current_user = caller();
+    PAYMENTS.with(|payments_cell| {
+        let payments = payments_cell.borrow();
+        let mut total_usd_value_all_users = 0.0;
+        let mut total_usd_value_user = 0.0;
+        let mut all_payments = Vec::new();
+        let mut user_payments = Vec::new();
+        let mut user_vip_expiry = 0u64; // 用户VIP截止时间
+        let mut user_total_amount = Nat::from(0u64); // 用户金额累加
 
-    let result = if let Some(unclaimed) = STATE.with_borrow_mut(|s| s.claim_pledge_reward(c)) {
-        let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
+        let mut earliest_start_time = u64::MAX; // 最早的起始时间，初始值为 u64 的最大值
+        let mut total_duration = 0u64; // 总时长
 
-        let res = satslink_token_can
-            .icrc1_transfer(TransferArg {
-                to: Account {
-                    owner: req.to,
-                    subaccount: None,
-                },
-                amount: Nat(unclaimed.clone().val),
-                from_subaccount: None,
-                fee: None,
-                created_at_time: None,
-                memo: None,
-            })
-            .await
-            .map_err(|e| format!("{:?}", e))
-            .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
+        for payment in payments.iter() {
+            let canister_id = Principal::from_text(&payment.canister_id)
+                .map_err(|e| format!("Invalid canister ID: {:?}", e))?;
+            let usd_value = calculate_usd_value(&canister_id, &payment.amount)?;
 
-        match res {
-            Ok(r) => match r {
-                Ok(idx) => Ok(idx),
-                Err(e) => {
-                    STATE.with_borrow_mut(|s| s.revert_claim_pledge_reward(c, unclaimed));
-                    Err(e)
+            total_usd_value_all_users += usd_value;
+            all_payments.push(payment.clone());
+
+            if payment.principal.to_text() == current_user.to_text() {
+                total_usd_value_user += usd_value;
+                user_total_amount += payment.amount.clone();
+                user_payments.push(payment.clone());
+
+                // 更新最早的起始时间
+                if payment.payment_create < earliest_start_time {
+                    earliest_start_time = payment.payment_create;
                 }
-            },
-            Err(e) => {
-                STATE.with_borrow_mut(|s| s.revert_claim_pledge_reward(c, unclaimed));
-                Err(e)
+
+                // 累加时长
+                total_duration += payment.expiry_time - payment.payment_create;
             }
         }
-    } else {
-        Err(format!("Not unclaimed reward found!"))
-    };
 
-    ClaimRewardResponse { result }
-}
-
-#[update]
-async fn claim_vip_reward(req: ClaimRewardRequest) -> ClaimRewardResponse {
-    assert_running();
-
-    let c = caller();
-
-    let result = if let Some(unclaimed) = STATE.with_borrow_mut(|s| s.claim_vip_reward(c)) {
-        let satslink_token_can = ICRC1CanisterClient::new(ENV_VARS.satslink_token_canister_id);
-
-        let res = satslink_token_can
-            .icrc1_transfer(TransferArg {
-                to: Account {
-                    owner: req.to,
-                    subaccount: None,
-                },
-                amount: Nat(unclaimed.clone().val),
-                from_subaccount: None,
-                fee: None,
-                created_at_time: None,
-                memo: None,
-            })
-            .await
-            .map_err(|e| format!("{:?}", e))
-            .map(|(r,)| r.map_err(|e| format!("{:?}", e)));
-
-        match res {
-            Ok(r) => match r {
-                Ok(idx) => Ok(idx),
-                Err(e) => {
-                    STATE.with_borrow_mut(|s| s.revert_claim_vip_reward(c, unclaimed));
-                    Err(e)
-                }
-            },
-            Err(e) => {
-                STATE.with_borrow_mut(|s| s.revert_claim_vip_reward(c, unclaimed));
-                Err(e)
-            }
+        // 计算总时长截止时间
+        if earliest_start_time == u64::MAX {
+            // 如果没有支付记录，则设置为 0
+            user_vip_expiry = 0;
+        } else {
+            user_vip_expiry = earliest_start_time + total_duration;
         }
-    } else {
-        Err(format!("Not unclaimed reward found!"))
-    };
 
-    ClaimRewardResponse { result }
+        // 返回所有账单数据和用户的VIP截止时间、金额累加
+        Ok(PaymentStats {
+            total_usd_value_all_users,
+            total_usd_value_user,
+            all_payments,
+            user_payments,
+            user_vip_expiry, // 用户VIP截止时间
+            user_total_amount, // 用户金额
+        })
+    })
 }
 
-#[update]
-fn migrate_stl_account(req: MigrateAccountRequest) -> MigrateAccountResponse {
-    STATE.with_borrow_mut(|s| s.migrate_satslinker_account(&caller(), req.to))
-        .expect("Unable to migrate SATSLINK account");
-
-    MigrateAccountResponse {}
-}
-
-#[update]
-fn enable_satslink() {
-    assert_caller_is_dev();
-
-    STATE.with_borrow_mut(|s| {
-        let mut info = s.get_info();
-        info.enable_satslink();
-        s.set_info(info);
-    });
-}
-
-#[update]
-fn disable_satslink() {
-    assert_caller_is_dev();
-
-    STATE.with_borrow_mut(|s| {
-        let mut info = s.get_info();
-        info.disable_satslink();
-        s.set_info(info);
-    });
-}
-
+/// 根据 ETH 地址查询支付记录，并返回合并后的 VIP 截止时间
 #[query]
-fn can_migrate_stl_account() -> bool {
-    STATE.with_borrow(|s| 
-        s.get_info().can_vip_migrate(&caller()) && s.get_info().can_pledge_migrate(&caller())
-    )
+pub fn get_payments_by_eth_address(eth_address: String) -> u64 {
+    PAYMENTS.with(|payments| {
+        let payments_vec = payments.borrow();
+        let mut earliest_start_time = u64::MAX; // 最早的起始时间，初始值为 u64 的最大值
+        let mut total_duration = 0u64; // 总时长
+
+        for payment in payments_vec.iter().filter(|p| p.eth_address == eth_address) {
+            // 更新最早的起始时间
+            if payment.payment_create < earliest_start_time {
+                earliest_start_time = payment.payment_create;
+            }
+
+            // 累加时长
+            total_duration += payment.expiry_time - payment.payment_create;
+        }
+
+        // 计算总时长截止时间
+        if earliest_start_time == u64::MAX {
+            // 如果没有支付记录，则设置为 0
+            0
+        } else {
+            earliest_start_time + total_duration
+        }
+    })
 }
 
+/// 根据 ETH 地址查询支付记录，接口为 query 方法
 #[query]
-fn get_satslinkers(address: Address) -> GetVIPuserResponse {
-    STATE.with_borrow(|s| s.get_satslinkers(address))
+pub fn get_payments_by_principal(principal: String) -> Vec<PaymentRecord> {
+    PAYMENTS.with(|payments| {
+        let payments_vec = payments.borrow();
+        payments_vec
+            .iter()
+            .filter(|p| p.principal.to_text() == principal)
+            .map(|p| p.clone())
+            .collect()
+    })
 }
 
+/// 统计支付用户的总数，即 PaymentRecord 中不同的 principal 数量
 #[query]
-fn get_totals() -> GetTotalsResponse {
-    STATE.with_borrow(|s| s.get_totals(&caller()))
+pub fn count_payment_users() -> usize {
+    PAYMENTS.with(|payments| {
+        let payments_vec = payments.borrow();
+        let unique_users: HashSet<Principal> = payments_vec
+            .iter()
+            .map(|payment| payment.principal.clone())
+            .collect();
+        unique_users.len()
+    })
 }
 
 #[query]
 fn subaccount_of(id: Principal) -> Subaccount {
-    // Subaccount::from(id)
     Account::from(id).subaccount.unwrap_or([0u8; 32])
 }
 
 #[init]
 fn init_hook() {
     STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
-
-    set_init_seed_one_timer();
-    set_cycles_icp_exchange_rate_timer();
-    set_icp_redistribution_timer();
-    print!("Starting set_lottery_and_pos_and_pledge_timer function");
-    set_lottery_and_pos_and_pledge_timer();
-    print!("Finished set_lottery_and_pos_and_pledge_timer function");
+    ADMIN.with_borrow_mut(|admin| *admin = caller());
+    // 初始化白名单（可选）
+    // WHITELISTED_TOKENS.with(|whitelist| {
+    //     let mut whitelist = whitelist.borrow_mut();
+    //     whitelist.insert(Principal::from_text("your_icp_canister_id").unwrap());
+    // });
+    set_clean_expired_payments_timer();
+    println!("Finished set_clean_expired_payments_timer function");
 }
 
 #[post_upgrade]
 fn post_upgrade_hook() {
     STOPPED_FOR_UPDATE.with_borrow_mut(|(dev, _)| *dev = caller());
-    // TODO: Remove this before the next upgrade
-    STATE.with_borrow_mut(|s| s.init_tmp_can_migrate());
-
-    set_cycles_icp_exchange_rate_timer();
-    set_icp_redistribution_timer();
-    set_lottery_and_pos_and_pledge_timer();
+    ADMIN.with_borrow_mut(|admin| *admin = caller());
+    // 重新初始化白名单（可选）
+    // WHITELISTED_TOKENS.with(|whitelist| {
+    //     let mut whitelist = whitelist.borrow_mut();
+    //     whitelist.insert(Principal::from_text("your_icp_canister_id").unwrap());
+    // });
+    set_clean_expired_payments_timer();
+    println!("Finished set_clean_expired_payments_timer function");
 }
 
 #[update]
 fn stop() {
-    assert_caller_is_dev();
-
     STOPPED_FOR_UPDATE.with_borrow_mut(|(_dev, is_stopped)| {
         if !*is_stopped {
             *is_stopped = true;
@@ -430,8 +423,6 @@ fn stop() {
 
 #[update]
 fn resume() {
-    assert_caller_is_dev();
-
     STOPPED_FOR_UPDATE.with_borrow_mut(|(_dev, is_stopped)| {
         if *is_stopped {
             *is_stopped = false;
@@ -439,47 +430,56 @@ fn resume() {
     })
 }
 
-#[update]
-async fn refund_lost_tokens(_req: RefundLostTokensRequest) -> RefundLostTokensResponse {
-    /*     assert_caller_is_dev();
+pub fn set_clean_expired_payments_timer() {
+    set_timer(Duration::from_nanos(0), clean_expired_payments); // 初始立即执行一次
+}
 
-    match req.kind {
-        RefundTokenKind::ICP(accounts) => {
-            let icp_can_id = Principal::from_text(ICP_CAN_ID).unwrap();
-            let mut futs = Vec::new();
-
-            for (account, refund_sum) in accounts {
-                let transfer_args = TransferArgs {
-                    amount: Tokens::from_e8s(refund_sum),
-                    to: account,
-                    memo: Memo(763824),
-                    fee: Tokens::from_e8s(ICP_FEE),
-                    from_subaccount: None,
-                    created_at_time: None,
-                };
-
-                futs.push(async {
-                    let res = transfer(icp_can_id, transfer_args).await;
-
-                    match res {
-                        Ok(r) => match r {
-                            Ok(b) => Ok(Nat::from(b)),
-                            Err(e) => Err(format!("ICP Transfer error: {}", e)),
-                        },
-                        Err(e) => Err(format!("ICP Call error: {:?}", e)),
-                    }
-                });
-            }
-
-            RefundLostTokensResponse {
-                results: join_all(futs).await,
+fn clean_expired_payments() {
+    let current_time: u64 = ic_cdk::api::time();
+    PAYMENTS.with(|payments| {
+        let mut payments_mut = payments.borrow_mut();
+        let mut payments_to_remove = Vec::new();
+        let payments_vec = payments_mut.iter().collect::<Vec<_>>();
+        for i in 0..payments_mut.len() {
+            if payments_vec.get(i as usize).map_or(false, |record| record.expiry_time <= current_time) {
+                payments_to_remove.push(i);
             }
         }
-    } */
 
-    RefundLostTokensResponse {
-        results: Vec::new(),
+        // 从后往前删除，避免索引错乱
+        let mut payments_vec: Vec<PaymentRecord> = payments_mut.iter().map(|r| r.clone()).collect();
+        for &index in payments_to_remove.iter().rev() {
+            payments_vec.remove(index as usize);
+        }
+
+        // 修复：使用 StableVec::init() 初始化并插入元素
+        let memory_manager = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))); // 获取 MemoryManager
+        let new_payments = StableVec::init(memory_manager).expect("Failed to initialize StableVec"); // 使用 MemoryManager 初始化 StableVec
+        for payment in payments_vec {
+            new_payments.push(&payment).expect("Failed to push payment record");
+        }
+        *payments_mut = new_payments; // 更新 payments_mut
+    });
+    set_timer(Duration::from_secs(3600), clean_expired_payments);
+}
+
+// 辅助函数：计算美元价值
+fn calculate_usd_value(canister_id: &Principal, amount: &Nat) -> Result<f64, String> {
+    let icp_canister_id = Principal::from_text(ICP_CANISTER_ID).unwrap();
+    // 将 Nat 转换为 f64，避免溢出
+    let amount_f64 = amount.0.to_string().parse::<f64>().map_err(|_| "Failed to convert Nat to f64".to_string())?;
+
+    if canister_id == &icp_canister_id {
+        // 如果是 ICP，获取 ICP 价格并计算
+        let icp_price = get_icp_price()?;
+        let amount_f64 = amount_f64 / 100_000_000.0;
+        Ok(amount_f64 * icp_price)
+    } else {
+        // 如果不是 ICP，假设价值为 1 美元 (您可以根据需要修改此逻辑)
+        let amount_f64 = amount_f64 / 100_000_000.0;
+        Ok(amount_f64)
     }
 }
 
 export_candid!();
+

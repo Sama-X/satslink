@@ -25,8 +25,8 @@ export interface IProfileProps extends IClass {
 
 export function ProfileFull(props: IProfileProps) {
   const { identity, isAuthorized, authProvider } = useAuth();
-  const { totals, canMigrateMsqAccount, migrateMsqAccount, canVerifyDecideId, verifyDecideId } = useSatslinker();
-
+  //const { totals, canMigrateMsqAccount, migrateMsqAccount, canVerifyDecideId, verifyDecideId } = useSatslinker();
+  const { getMyPayAccount, myPayments, paymentUserCount, fetchAllPayments, fetchMyPayments, fetchPaymentUserCount, canPay, pay, fetchPaymentsByEthAddress } = useSatslinker();
   const [migratePopupVisible, setMigratePopupVisible] = createSignal(false);
 
   const [pseudonym] = createResource(identity, getPseudonym);
@@ -39,10 +39,11 @@ export function ProfileFull(props: IProfileProps) {
   };
 
   const isDecideAIVerified = () => {
-    const t = totals.data;
-    if (!t) return false;
+    // const t = totals.data;
+    // if (!t) return false;
 
-    return t.yourDecideIdVerificationStatus;
+    // return t.yourDecideIdVerificationStatus;
+    return false;
   };
 
   const isMSQ = () => {
@@ -50,7 +51,7 @@ export function ProfileFull(props: IProfileProps) {
   };
 
   const handleVerifyDecideIdClick = eventHandler(() => {
-    verifyDecideId();
+    //verifyDecideId();
   });
 
   const handleMigratePopupOpenClick = eventHandler(() => {
@@ -71,7 +72,7 @@ export function ProfileFull(props: IProfileProps) {
               <Show when={isMSQ()}>
                 <p class="text-xs text-gray-140">Only Internet Identity users can verify their personhood</p>
               </Show>
-              <Show when={canVerifyDecideId()}>
+              {/* <Show when={canVerifyDecideId()}>
                 <div
                   onClick={handleVerifyDecideIdClick}
                   class="flex items-center flex-nowrap justify-center gap-2 text-white font-normal text- rounded-full px-6 py-2 cursor-pointer bg-gray-110"
@@ -92,7 +93,7 @@ export function ProfileFull(props: IProfileProps) {
                 >
                   Migrate
                 </p>
-              </Show>
+              </Show> */}
             </div>
           </div>
         </div>
@@ -119,12 +120,12 @@ export function ProfileFull(props: IProfileProps) {
               </p>
             </div>
 
-            <Btn
+            {/* <Btn
               text="Continue with"
               icon={EIconKind.InternetComputer}
               bgColor={COLORS.black}
               onClick={migrateMsqAccount}
-            />
+            /> */}
           </div>
         </Modal>
       </Show>
@@ -134,16 +135,17 @@ export function ProfileFull(props: IProfileProps) {
 
 export function ProfileMini(props: IProfileProps) {
   const { identity } = useAuth();
-  const { totals, fetchTotals } = useSatslinker();
+  // const { totals, fetchTotals } = useSatslinker();
 
   const [pseudonym] = createResource(identity, getPseudonym);
   const [avatarSrc] = createResource(identity, getAvatarSrc);
 
   const isDecideAIVerified = () => {
-    const t = totals.data;
-    if (!t) return false;
+    // const t = totals.data;
+    // if (!t) return false;
 
-    return t.yourDecideIdVerificationStatus;
+    // return t.yourDecideIdVerificationStatus;
+    return false;
   };
 
   return (
@@ -158,9 +160,13 @@ export function ProfileMini(props: IProfileProps) {
       <div class="flex flex-col text-white gap-1">
         <p class="font-primary text-xs font-bold">{pseudonym()}</p>
         <BalanceOf
-          tokenId={DEFAULT_TOKENS.satslink}
-          onRefreshOverride={fetchTotals}
-          balance={totals.data?.yourUnclaimedReward?.toBigIntRaw()}
+          // tokenId={DEFAULT_TOKENS.satslink}
+          // onRefreshOverride={fetchTotals}
+          // onRefreshOverride={getMyPayAccount}
+          // balance={totals.data?.yourUnclaimedReward?.toBigIntRaw()}
+          tokenId={DEFAULT_TOKENS.icp}
+          owner={identity()!.getPrincipal()}
+          subaccount={undefined} 
         />
       </div>
     </div>

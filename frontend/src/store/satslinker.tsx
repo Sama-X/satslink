@@ -1,118 +1,88 @@
-import { createContext, createEffect, createSignal, on, onCleanup, onMount, useContext } from "solid-js";
-import { IChildren, ONE_WEEK_NS } from "../utils/types";
+import { createContext, createEffect, createSignal, onCleanup, on, onMount, useContext } from "solid-js";
+import { IChildren } from "../utils/types";
 import { ErrorCode, err, logErr, logInfo } from "../utils/error";
 import { createStore, Store } from "solid-js/store";
-import { iiFeHost, useAuth } from "./auth";
-import { newSatslinkerActor, optUnwrap } from "@utils/backend";
+import { newSatslinkerActor } from "@utils/backend";
+import { Principal } from "@dfinity/principal";
+import { useAuth } from "./auth";
 import { DEFAULT_TOKENS, useTokens } from "./tokens";
 import { E8s, EDs } from "@utils/math";
-import { Principal } from "@dfinity/principal";
 import { debugStringify } from "@utils/encoding";
-import {
-  requestVerifiablePresentation,
-  VerifiablePresentationResponse,
-} from "@dfinity/verifiable-credentials/request-verifiable-presentation";
+import { ICP_INDEX_TOKEN_IDX } from "@fort-major/msq-shared";
 
-// Define TCycles type
-type TCycles = bigint;
 
-export interface ITotals {
-  totalPledgeTokenSupply: E8s;
-  totalTokenLottery: E8s;
-  totalTokenDev: E8s;
-  totalTokenMinted: E8s;
-  currentTokenReward: E8s;
-  currentShareFee: bigint;
-  isSatslinkEnabled: boolean;
-
-  currentPosRound: bigint;
-  posRoundDelayNs: bigint;
-  
-  totalPledgeParticipants: bigint;
-  totalVipParticipants: bigint;
-  icpToCyclesExchangeRate: bigint;
-
-  yourVipShares: bigint;
-  yourVipUnclaimedRewardE8s: E8s;
-  yourVipEligibilityStatus: boolean;
-  yourPledgeShares: E8s;
-  yourPledgeUnclaimedRewardE8s: E8s;
-  yourPledgeEligibilityStatus: boolean;
+export interface IPaymentRecord {
+  principal: Principal;
+  canister_id: string;
+  eth_address: string;
+  expiry_time: bigint;
+  amount: bigint;
+  payment_create: bigint;
 }
 
-export interface IPoolMember {
-  id: Principal;
-  share: EDs;
-  unclaimedReward: E8s;
-  isVerifiedViaDecideID: boolean;
+export interface IPaymentStats {
+  user_payments : Array<IPaymentRecord>,
+  user_vip_expiry : bigint,
+  total_usd_value_all_users : number,
+  total_usd_value_user : number,
+  user_total_amount : bigint,
+  all_payments : Array<IPaymentRecord>,
 }
 
-interface StakeResponse {
-  result: { Ok: bigint } | { Err: string };
-  message: string;
-}
-
+// 新的 Store 仅处理支付相关操作
 export interface ISatslinkerStoreContext {
-  totals: Store<{ data?: ITotals }>;
-  fetchTotals: () => Promise<void>;
+  paymentsStore: Store<{ allPayments?: IPaymentStats }>;
+  getMyPayAccount: () => { owner: Principal; subaccount?: Uint8Array } | undefined;
 
-  getMyDepositAccount: () => { owner: Principal; subaccount?: Uint8Array } | undefined;
+  fetchAllPayments: () => Promise<void>;
 
-  canStake: () => boolean;
-  stake: () => Promise<void>;
+  myPayments: () => IPaymentRecord[];
+  fetchMyPayments: () => Promise<void>;
 
-  canWithdraw: () => boolean;
-  withdraw: (amount: number, to: Principal) => Promise<StakeResponse>;
+  paymentUserCount: () => number;
+  fetchPaymentUserCount: () => Promise<void>;
 
-  canClaimReward: () => boolean;
-  claimReward: (to: Principal) => Promise<void>;
+  canPay: () => boolean;
+  pay: (amount: bigint, eth_address: string, canister_id: string) => Promise<void>;
 
-  poolMembers: () => IPoolMember[];
-  fetchPoolMembers: () => Promise<void>;
-
-  canMigrateMsqAccount: () => boolean;
-  migrateMsqAccount: () => Promise<void>;
-
-  canVerifyDecideId: () => boolean;
-  verifyDecideId: () => Promise<void>;
+  fetchPaymentsByEthAddress: (eth_address: string) =>  Promise<IPaymentRecord[]>; 
 }
 
 const SatslinkerContext = createContext<ISatslinkerStoreContext>();
 
 export function useSatslinker(): ISatslinkerStoreContext {
   const ctx = useContext(SatslinkerContext);
-
   if (!ctx) {
     err(ErrorCode.UNREACHEABLE, "Satslinker context is not initialized");
   }
-
-  return ctx;
+  return ctx!;
 }
 
 export function SatslinkerStore(props: IChildren) {
-  const {
+  const { 
     assertReadyToFetch,
-    assertAuthorized,
+    assertAuthorized, 
     anonymousAgent,
     isAuthorized,
-    agent,
-    identity,
+    agent, 
+    identity, 
     disable,
     enable,
     authProvider,
     iiClient,
     deauthorize,
-  } = useAuth();
-  const { subaccounts, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
+   } = useAuth();
 
-  const [totals, setTotals] = createStore<ISatslinkerStoreContext["totals"]>();
-  const [poolMembers, setPoolMembers] = createSignal<IPoolMember[]>([]);
+  // 使用 Signal 保存支付相关的数据
   const [int, setInt] = createSignal<NodeJS.Timeout>();
-  const [canMigrate, setCanMigrate] = createSignal(false);
-
+  const [paymentsStore, setPaymentsStore] = createStore<ISatslinkerStoreContext["paymentsStore"]>();
+  const [myPayments, setMyPayments] = createSignal<IPaymentRecord[]>([]);
+  const [paymentUserCount, setPaymentUserCount] = createSignal<number>(0);
+  const { subaccounts, approve, fetchSubaccountOf, balanceOf, fetchBalanceOf } = useTokens();
+  
   onMount(() => {
     const t = setInterval(() => {
-      fetchTotals();
+      fetchAllPayments();
     }, 1000 * 60 * 2);
 
     setInt(t);
@@ -129,7 +99,7 @@ export function SatslinkerStore(props: IChildren) {
     on(anonymousAgent, (a) => {
       if (!a) return;
 
-      fetchTotals();
+      fetchAllPayments();
     })
   );
 
@@ -137,337 +107,150 @@ export function SatslinkerStore(props: IChildren) {
     on(agent, (a) => {
       if (a!) {
         fetchSubaccountOf(identity()!.getPrincipal());
-        fetchTotals();
+        fetchAllPayments();
 
         if (authProvider() === "MSQ") {
-          fetchCanMigrateMsqAccount();
+          //fetchCanMigrateMsqAccount();
         }
       }
     })
   );
 
-  const fetchTotals: ISatslinkerStoreContext["fetchTotals"] = async () => {
-    assertReadyToFetch();
+  // 获取所有 ICP 支付记录
+  const fetchAllPayments: ISatslinkerStoreContext["fetchAllPayments"] = async () => {
+    const ag = agent() ? agent()! : anonymousAgent()!;
+    const satslinker = newSatslinkerActor(ag);
+    try {
+      const result = await satslinker.get_payment_stats();
+      if ("Ok" in result) {
+        setPaymentsStore("allPayments", result as unknown as IPaymentStats);
+      } else {
+        logErr("FETCH_ALL_PAYMENTS" as ErrorCode, `Error: ${result.Err}`);
+      }
+    } catch (error: any) {
+      logErr("GET_ALL_PAYMENTS" as ErrorCode, `Error: ${error.message || error}`);
+    }
+  };
+
+  // 获取当前用户的支付记录
+  const fetchMyPayments: ISatslinkerStoreContext["fetchMyPayments"] = async () => {
+    assertAuthorized();
+
+    const principal = identity()!.getPrincipal();
+    const ag = agent() ? agent()! : anonymousAgent()!;
+    const satslinker = newSatslinkerActor(ag);
+    try {
+      const payments = await satslinker.get_payments_by_eth_principal(principal.toString());
+      setMyPayments(payments as unknown as IPaymentRecord[]);
+    } catch (error: any) {
+      logErr("GET_MY_PAYMENTS" as unknown as ErrorCode, `Error: ${error.message || error}`);
+    }
+  };
+
+  // 获取支付用户数量（转换 bigint 为 number）
+  const fetchPaymentUserCount: ISatslinkerStoreContext["fetchPaymentUserCount"] = async () => {
+    assertAuthorized();
 
     const ag = agent() ? agent()! : anonymousAgent()!;
-
     const satslinker = newSatslinkerActor(ag);
-    const resp = await satslinker.get_totals();
-
-    const iTotals: ITotals = {
-      totalPledgeTokenSupply: E8s.new(resp.total_pledge_token_supply),
-      totalTokenLottery: E8s.new(resp.total_token_lottery),
-      totalTokenDev: E8s.new(resp.total_token_dev),
-      totalTokenMinted: E8s.new(resp.total_token_minted),
-      currentTokenReward: E8s.new(resp.current_token_reward),
-      currentShareFee: BigInt(resp.current_share_fee),
-      isSatslinkEnabled: resp.is_satslink_enabled,
-
-      currentPosRound: BigInt(resp.current_pos_round),
-      posRoundDelayNs: BigInt(resp.pos_round_delay_ns),
-      
-      totalPledgeParticipants: BigInt(resp.total_pledge_participants),
-      totalVipParticipants: BigInt(resp.total_vip_participants),
-      icpToCyclesExchangeRate: BigInt(resp.icp_to_cycles_exchange_rate),
-
-      yourVipShares: BigInt(resp.your_vip_shares),
-      yourVipUnclaimedRewardE8s: E8s.new(resp.your_vip_unclaimed_reward_e8s),
-      yourVipEligibilityStatus: resp.your_vip_eligibility_status,
-      yourPledgeShares: E8s.new(resp.your_pledge_shares),
-      yourPledgeUnclaimedRewardE8s: E8s.new(resp.your_pledge_unclaimed_reward_e8s),
-      yourPledgeEligibilityStatus: resp.your_pledge_eligibility_status
-    };
-
-    setTotals({ data: iTotals });
+    try {
+      const countBig = await satslinker.count_payment_users();
+      setPaymentUserCount(Number(countBig));
+    } catch (error: any) {
+      logErr("COUNT_PAYMENT_USERS" as unknown as ErrorCode, `Error: ${error.message || error}`);
+    }
   };
 
-  const fetchPoolMembers: ISatslinkerStoreContext["fetchPoolMembers"] = async () => {
-    assertReadyToFetch();
+  // 调用支付接口，principal 由当前身份决定
+  const pay: ISatslinkerStoreContext["pay"] = async (amount, eth_address, canister_id) => {
+    assertAuthorized();
 
-    let start: [] | [Principal] = [];
-    const members = [];
-    const satslinker = newSatslinkerActor(anonymousAgent()!);
-
-    // 获取以太坊地址
-    const auth = useAuth();
-    const addressBytes = await auth.getEthAddress();
-    if (!addressBytes) {
-      console.error("未能获取以太坊地址");
-      return;
+    const principal = identity()!.getPrincipal();
+    const satslinker = newSatslinkerActor(agent()!);
+    if (amount <= 0n) {
+      logErr("PAY" as unknown as ErrorCode, "无效的支付金额");
     }
-
-    // 调用 get_satslinkers 接口，传入以太坊地址
-    const response = await satslinker.get_satslinkers(addressBytes);
-
-    for (let entry of response.entry) {
-      let iPoolMember: IPoolMember = {
-        id: entry[1], // Principal
-        share: EDs.new(entry[2], 12), // share
-        unclaimedReward: E8s.new(entry[3]), // unclaimed reward
-        isVerifiedViaDecideID: entry[4], // VIP status
-      };
-
-      members.push(iPoolMember);
+    try {
+      //实现调用useTokens 里面的approve
+      const tokenId: Principal = DEFAULT_TOKENS.icp;
+      // if (tokenType == 'ICRC'){
+      //   tokenId = 
+      // }
+      const amountForApproval = BigInt(Math.floor(Number(amount) * 100000000)) + BigInt(10000);
+      // 调用 approve 方法
+      await approve(tokenId, Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID), amountForApproval);
+      amount = amountForApproval - BigInt(10000); // 减去手续费
+      const result = await satslinker.pay(principal, amount, eth_address, tokenId.toText());
+      if ("Err" in result && result.Err) {
+        logErr("PAY" as unknown as ErrorCode, (result.Err as any).toString())
+      } else {
+        //logInfo(`Payment succeeded. ${amount.toString()} ICP, principal=${principal.toString()}`);
+      }
+    } catch (error: any) {
+      logErr("PAY" as unknown as ErrorCode, `Error: ${error.message || error}`)
     }
-
-    setPoolMembers(
-      members.sort((a, b) => {
-        if (a.share.gt(b.share)) {
-          return -1;
-        } else if (a.share.lt(b.share)) {
-          return 1;
-        } else {
-          return 0;
-        }
-      })
-    );
   };
 
-  const getMyDepositAccount: ISatslinkerStoreContext["getMyDepositAccount"] = () => {
+  const canPay: ISatslinkerStoreContext["canPay"] = () => {
+    // return true;
+    const authorized = isAuthorized();
+    //console.log(`用户已登录: ${authorized}`);
+
+    const myDepositAccount = getMyPayAccount();
+    //console.log(`支付账户: ${JSON.stringify(myDepositAccount)}`);
+
+    if (!authorized || !myDepositAccount) return false;
+
+    const balance = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
+    //console.log(`用户余额: ${balance}`);
+
+    if (!balance || E8s.new(balance).le(E8s.f0_5())) return false;
+
+    return true;
+  };
+
+  // 根据以太坊地址获取支付记录
+  const fetchPaymentsByEthAddress: ISatslinkerStoreContext["fetchPaymentsByEthAddress"] = async (eth_address: string) => {
+    assertAuthorized();
+
+    const ag = agent() ? agent()! : anonymousAgent()!;
+    const satslinker = newSatslinkerActor(ag);
+    try {
+      const payments = await satslinker.get_payments_by_eth_address(eth_address);
+      setMyPayments(payments as unknown as IPaymentRecord[]);
+      return payments as unknown as IPaymentRecord[];
+    } catch (error: any) {
+      logErr("GET_PAYMENTS_BY_ETH_ADDRESS" as ErrorCode, `Error: ${error.message || error}`);
+      return [] as IPaymentRecord[];
+    }
+  };
+
+  const getMyPayAccount: ISatslinkerStoreContext["getMyPayAccount"] = () => {
     if (!isAuthorized()) return undefined;
 
-    const mySubaccount = subaccounts[identity()!.getPrincipal().toText()];
+    const principal = identity()!.getPrincipal(); // 获取当前用户的 Principal
+    const mySubaccount = subaccounts[principal.toText()];
     if (!mySubaccount) return undefined;
 
-    return { owner: Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID), subaccount: mySubaccount };
+    //return { owner: Principal.fromText(import.meta.env.VITE_SATSLINKER_CANISTER_ID), subaccount: mySubaccount };
+    return { owner: principal, subaccount: mySubaccount };
   };
 
-  createEffect(
-    on(getMyDepositAccount, (acc) => {
-      if (!acc) return;
-
-      fetchBalanceOf(DEFAULT_TOKENS.icp, acc.owner, acc.subaccount);
-    })
-  );
-
-  const canStake: ISatslinkerStoreContext["canStake"] = () => {
-    if (!isAuthorized()) return false;
-
-    const myDepositAccount = getMyDepositAccount();
-    if (!myDepositAccount) return false;
-
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-    if (!b) return false;
-
-    if (E8s.new(b).le(E8s.f0_5())) return false;
-
-    return true;
-  };
-
-  const stake: ISatslinkerStoreContext["stake"] = async () => {
-    assertAuthorized();
-
-    disable();
-
-    const myDepositAccount = getMyDepositAccount()!;
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount)!;
-    const satslinker = newSatslinkerActor(agent()!);
-    const auth = useAuth();
-    const addressBytes = await auth.getEthAddress();
-    if (addressBytes === null) {
-      err(ErrorCode.AUTH, "Failed to get ETH address");
-    }
-    await satslinker.purchase({ qty_e8s_u64: b - 10_000n, address: addressBytes });
-
-    enable();
-
-    fetchTotals();
-    fetchBalanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-
-    logInfo(`Successfully satslinked ${E8s.new(b).toString()} ICP`);
-  };
-
-  const canWithdraw: ISatslinkerStoreContext["canWithdraw"] = () => {
-    if (!isAuthorized()) return false;
-
-    const myDepositAccount = getMyDepositAccount();
-    if (!myDepositAccount) return false;
-
-    const b = balanceOf(DEFAULT_TOKENS.icp, myDepositAccount.owner, myDepositAccount.subaccount);
-    if (!b) return false;
-
-    // min withdraw amount is 0.1 ICP
-    if (E8s.new(b).le(E8s.new(10_0000n))) return false;
-
-    return true;
-  };
-
-  const withdraw: ISatslinkerStoreContext["withdraw"] = async (amount: number, to: Principal) => {
-    assertReadyToFetch();
-    const actor = newSatslinkerActor(agent()!);
-    const result = await actor.purchase({
-      qty_e8s_u64: E8s.new(BigInt(amount)).toBigIntRaw(),
-      address: new Uint8Array(to.toUint8Array())
-    });
-    return result;
-  };
-
-  const canClaimReward: ISatslinkerStoreContext["canClaimReward"] = () => {
-    if (!isAuthorized()) return false;
-
-    if (!totals.data) return false;
-
-    return totals.data.yourVipUnclaimedRewardE8s.gt(E8s.zero());
-  };
-
-  const claimReward: ISatslinkerStoreContext["claimReward"] = async (to) => {
-    assertAuthorized();
-
-    disable();
-
-    const satslinker = newSatslinkerActor(agent()!);
-    const result = await satslinker.claim_vip_reward({ to });
-
-    if ("Err" in result) {
-      logErr(ErrorCode.UNKNOWN, debugStringify(result.Err));
-      enable();
-
-      return;
-    }
-
-    enable();
-
-    fetchTotals();
-    logInfo(`Successfully claimed all SATSLINK!`);
-  };
-
-  const fetchCanMigrateMsqAccount = async () => {
-    assertAuthorized();
-
-    const satslinker = newSatslinkerActor(agent()!);
-    const result = await satslinker.can_migrate_stl_account();
-
-    setCanMigrate(result);
-  };
-
-  const canMigrateMsqAccount = () => {
-    if (!isAuthorized()) return false;
-    if (!canMigrate()) return false;
-    if (authProvider() === "II") return false;
-
-    return true;
-  };
-
-  const migrateMsqAccount: ISatslinkerStoreContext["migrateMsqAccount"] = async () => {
-    assertAuthorized();
-
-    disable();
-
-    try {
-      const iiIdentity = await accessIiIdentity();
-
-      const satslinker = newSatslinkerActor(agent()!);
-      await satslinker.migrate_stl_account({ to: iiIdentity.getPrincipal() });
-
-      await deauthorize();
-      window.location.reload();
-    } finally {
-      enable();
-    }
-  };
-
-  const accessIiIdentity = async () => {
-    const client = iiClient();
-    if (!client) {
-      enable();
-      err(ErrorCode.AUTH, "Uninitialized auth client");
-    }
-
-    const isAuthenticated = await client.isAuthenticated();
-
-    if (isAuthenticated) {
-      return client.getIdentity();
-    }
-
-    await new Promise((res, rej) =>
-      client.login({
-        identityProvider: iiFeHost(),
-        onSuccess: res,
-        onError: rej,
-        maxTimeToLive: ONE_WEEK_NS,
-      })
-    );
-
-    return client.getIdentity();
-  };
-
-  const canVerifyDecideId: ISatslinkerStoreContext["canVerifyDecideId"] = () => {
-    if (!isAuthorized()) return false;
-
-    const t = totals.data;
-    if (!t) return false;
-
-    const p = authProvider();
-    if (p === "MSQ") return false;
-
-    return !t.yourVipEligibilityStatus;
-  };
-
-  const verifyDecideId: ISatslinkerStoreContext["verifyDecideId"] = async () => {
-    assertAuthorized();
-
-    disable();
-
-    try {
-      const userPrincipal = identity()!.getPrincipal();
-
-      const jwt: string = await new Promise((res, rej) => {
-        requestVerifiablePresentation({
-          onSuccess: async (verifiablePresentation: VerifiablePresentationResponse) => {
-            if ("Ok" in verifiablePresentation) {
-              res(verifiablePresentation.Ok);
-            } else {
-              rej(new Error(verifiablePresentation.Err));
-            }
-          },
-          onError(err) {
-            rej(new Error(err));
-          },
-          issuerData: {
-            origin: "https://id.decideai.xyz",
-            canisterId: Principal.fromText("qgxyr-pyaaa-aaaah-qdcwq-cai"),
-          },
-          credentialData: {
-            credentialSpec: {
-              credentialType: "ProofOfUniqueness",
-              arguments: {},
-            },
-            credentialSubject: userPrincipal,
-          },
-          identityProvider: new URL(iiFeHost()),
-        });
-      });
-
-      const satslinker = newSatslinkerActor(agent()!);
-      //await satslinker.verify_decide_id({ jwt });
-
-      fetchTotals();
-    } finally {
-      enable();
-    }
+  const storeContext: ISatslinkerStoreContext = {
+    paymentsStore,
+    myPayments,
+    paymentUserCount,
+    fetchAllPayments,
+    fetchMyPayments,
+    fetchPaymentUserCount,
+    pay,
+    canPay,
+    fetchPaymentsByEthAddress,
+    getMyPayAccount,
   };
 
   return (
-    <SatslinkerContext.Provider
-      value={{
-        totals,
-        fetchTotals,
-        poolMembers,
-        fetchPoolMembers,
-        getMyDepositAccount,
-        stake,
-        canStake,
-        withdraw,
-        canWithdraw,
-        canClaimReward,
-        claimReward,
-
-        canMigrateMsqAccount,
-        migrateMsqAccount,
-        canVerifyDecideId,
-        verifyDecideId,
-      }}
-    >
+    <SatslinkerContext.Provider value={storeContext}>
       {props.children}
     </SatslinkerContext.Provider>
   );

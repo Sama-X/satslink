@@ -17,10 +17,10 @@ export async function makeAgent(identity?: Identity | undefined, opts?: { mainne
     retryTimes: 10,
   });
 
-  if (import.meta.env.DEV && !opts?.mainnet) {
-    await agent.fetchRootKey();
-  }
-
+  // if (import.meta.env.DEV && !opts?.mainnet) {
+  //   await agent.fetchRootKey();
+  // }
+  await agent.fetchRootKey();
   return agent;
 }
 

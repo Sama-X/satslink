@@ -6,7 +6,7 @@ import { useAuth } from "./auth";
 import { Principal } from "@dfinity/principal";
 import { E8s, EDs } from "@utils/math";
 import { bytesToHex, debugStringify, tokensToStr } from "@utils/encoding";
-import { IcrcLedgerCanister, IcrcMetadataResponseEntries } from "@dfinity/ledger-icrc";
+import { ApproveParams, IcrcLedgerCanister, IcrcMetadataResponseEntries } from "@dfinity/ledger-icrc";
 import { newSatslinkerActor, newICPSwapInfoActor, opt, optUnwrap } from "@utils/backend";
 import { nowNs } from "@utils/common";
 
@@ -44,6 +44,10 @@ export interface ITokensStoreContext {
 
   icpSwapUsdExchangeRates: Store<Partial<Record<TPrincipalStr, E8s>>>;
   fetchIcpSwapUsdExchangeRates: () => Promise<void>;
+
+  approve: (tokenId: Principal, speender: Principal, qty: bigint) => Promise<void>;
+  canApprove: (tokenId: Principal) => boolean;
+
 }
 
 const TokensContext = createContext<ITokensStoreContext>();
@@ -281,6 +285,39 @@ export function TokensStore(props: IChildren) {
     fetchBalanceOf(DEFAULT_TOKENS.icp, pid);
   };
 
+  const canApprove: ITokensStoreContext["canApprove"] = (tokenId) => isAuthorized() && !!metadata[tokenId.toText()];
+
+  const approve: ITokensStoreContext["approve"] = async (tokenId, spender, qty) => {
+    assertAuthorized();
+
+    disable();
+
+    const meta = metadata[tokenId.toText()]!;
+    const ledger = IcrcLedgerCanister.create({ agent: agent()!, canisterId: tokenId });
+    const mySubaccount = subaccounts[identity()!.getPrincipal().toText()];
+
+    // 授权参数配置
+    const approveParams: ApproveParams = {
+      from_subaccount: mySubaccount,
+      spender: { owner: spender, subaccount: [] },
+      amount: qty,
+      expected_allowance: undefined,
+      expires_at: undefined,
+      fee: undefined,
+      memo: undefined,
+      created_at_time: undefined,
+    };
+
+    try {
+      const blockIdx = await ledger.approve(approveParams);
+      //logInfo(`Approved ${qty.toString()} ${meta.ticker} to ${spender.toText()} at #${blockIdx.toString()}`);
+    } catch (e) {
+      logErr(ErrorCode.NETWORK, debugStringify(e));
+    } finally {
+      enable();
+    }
+  };
+
   return (
     <TokensContext.Provider
       value={{
@@ -297,6 +334,8 @@ export function TokensStore(props: IChildren) {
         claimLost,
         icpSwapUsdExchangeRates,
         fetchIcpSwapUsdExchangeRates,
+        approve,
+        canApprove,
       }}
     >
       {props.children}

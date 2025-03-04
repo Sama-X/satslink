@@ -23,7 +23,7 @@ export function Header(props: IHeaderProps) {
   const [authModalVisible, setAuthModalVisible] = createSignal(false);
 
   const handleAuth = async (provider: TAuthProvider) => {
-    if (areWeOnMobile() && provider === "STL") {
+    if (areWeOnMobile() && provider === "MSQ") {
       logErr(ErrorCode.AUTH, "Mobile Not Supported!");
       return;
     }
@@ -42,7 +42,7 @@ export function Header(props: IHeaderProps) {
   const selectAuthProviderForm = (
     <div class="flex flex-col gap-4">
       <Btn
-        text="STL - MetaMask"
+        text="MSQ - MetaMask"
         icon={EIconKind.MetaMask}
         class="rounded-full h-[50px] self-stretch text-black font-semibold"
         onClick={() => handleAuth("MSQ")}
@@ -95,11 +95,11 @@ export function Header(props: IHeaderProps) {
                 })}
                 href={ROOT.$.pool.path}
               >
-                Pool
+                我的
               </A>
             </Show>
 
-            <A
+            {/* <A
               activeClass="underline"
               class="hover:underline"
               onClick={eventHandler(() => {
@@ -108,7 +108,7 @@ export function Header(props: IHeaderProps) {
               href={ROOT.$.info.path}
             >
               Info
-            </A>
+            </A> */}
           </nav>
 
           <Switch>

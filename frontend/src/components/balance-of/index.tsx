@@ -81,7 +81,7 @@ export const BalanceOf = (props: IBalanceOfProps) => {
       </Show>
       <div class="flex gap-1 items-baseline">
         <p class="font-semibold text-white text-lg">{balance() ? balance()!.toDecimals(2).toString() : "0.00"}</p>
-        <p class="font-thin text-gray-140 text-sm">{meta()?.ticker ?? "STK"}</p>
+        <p class="font-thin text-gray-140 text-sm">{meta()?.ticker ?? "ICP"}</p>
       </div>
 
       <Show when={props.balance === undefined || props.onRefreshOverride !== undefined}>
