@@ -1,61 +1,113 @@
-# `satslink`
+\`\`\`markdown
 
-Welcome to your new `satslink` project and to the Internet Computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+# Satslink
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+**Project Overview**
+Satslink is an innovative privacy communication application designed for Web3 users. It integrates the functionalities of a traditional VPN and leverages Sama Network's full-stack data encryption communication capabilities to provide users with end-to-end comprehensive data encryption protection.
 
-To learn more before you start working with `satslink`, see the following documentation available online:
+**Project Objectives**
 
-- [Quick Start](https://internetcomputer.org/docs/current/developer-docs/setup/deploy-locally)
-- [SDK Developer Tools](https://internetcomputer.org/docs/current/developer-docs/setup/install)
-- [Rust Canister Development Guide](https://internetcomputer.org/docs/current/developer-docs/backend/rust/)
-- [ic-cdk](https://docs.rs/ic-cdk)
-- [ic-cdk-macros](https://docs.rs/ic-cdk-macros)
-- [Candid Introduction](https://internetcomputer.org/docs/current/developer-docs/backend/candid/)
+Satslink aims to:
 
-If you want to start working on your project right away, you might want to try the following commands:
+  - **Enhance Web3 User Privacy:** Replace centralized VPNs and address the data leakage and auditing risks inherent in traditional VPNs.
+  - **Ensure Data Security:** Prevent user data from being hijacked, monitored, and analyzed by centralized entities.
+  - **Build a Secure Network Environment:** Utilize SAMA Network's consensus and business sharding technology to enhance network security and privacy.
+  - **Simplify Web3 Payments:** Based on MSQ, enable direct purchase of ICP and ICRC-1 and payment of VPN service fees.
 
-```bash
-cd satslink/
-dfx help
-dfx canister --help
+📐 **Project Architecture and Function Overview**
+
+Satslink is built upon the following core technologies:
+
+  - **Sama Network:** Provides underlying full-stack data encryption communication capabilities to ensure data transmission security.
+  - **MSQ (Message Stream Queue):** Used for user identity integration and payment systems, enabling user authorization and on-chain transactions.
+  - **Internet Computer (ICP):** Serves as the underlying blockchain platform, providing decentralized infrastructure.
+  - **ICRC-1:** Used for cryptocurrency payments and transactions.
+  - **IC Exchange Rate Canister:** Ensures the dynamic and fair pricing of Satslink services.
+  - **Android (Client):** Provides a user-friendly mobile application.
+
+**(Architecture Diagram)**
+
+```mermaid
+graph LR
+    A[User (Android)] --> B(Satslink Client)
+    A --> C{Sama Network}
+    B --> D[Internet Computer (ICP)]
+    B --> E(MSQ) --> D[Internet Computer (ICP)]
+    B --> A[User (Android)]
+    C --> A[User (Android)]
 ```
 
-## Running the project locally
+**Web3 Privacy Communication Application, Your Data, Under Your Control.**
 
-If you want to test your project locally, you can use the following commands:
+[![Twitter](about:sanitized)](https://x.com/gknmoon)
+[![Discord](about:sanitized)](https://discord.com/channels/1062661363756966020/1159441094526902324)
 
-```bash
-# Starts the replica, running in the background
-dfx start --background
+🎯 **Provide Metadata**
 
-# Deploys your canisters to the replica and generates your candid interface
-dfx deploy
+  - **Description:** Satslink is a privacy communication application that provides end-to-end encrypted VPN services for Web3 users, ensuring data security and privacy. Built on the Sama Network, it is dedicated to replacing centralized VPNs and reducing data leakage and auditing risks.
+  - **Tags:** `internet-computer`, `privacy`, `VPN`, `Web3`, `encryption`, `Sama-network`, `ICP`, `ICRC-1`
+  - **Project Website/Homepage:** (Can be your project introduction page or your personal website. Leave blank if not available yet)
+  - **Code Repositories:**
+      - [satslink\_client\_android](https://github.com/Sama-X/satslink_client_android) - Android client code repository
+      - [satslink](https://github.com/Sama-X/satslink) - ICP - Satslink core code repository
+
+**Core Interfaces**
+
+  - **Get the number of billed users:**
+
+<!-- end list -->
+
+```
+count_payment_users : () -> (nat64) query;
 ```
 
-Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.
+  - **Get all non-expired payment bills:**
 
-If you have made changes to your backend canister, you can generate a new candid interface with
+<!-- end list -->
 
-```bash
-npm run generate
+```
+get_payment_stats : () -> (Result_1) query;
 ```
 
-at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
+  - **Get payment bills by eth address:**
 
-If you are making frontend changes, you can start a development server with
+<!-- end list -->
 
-```bash
-npm start
+```
+get_payments_by_eth_address : (text) -> (nat64) query;
 ```
 
-Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
+  - **Get payment bills by principal:**
 
-### Note on frontend environment variables
+<!-- end list -->
 
-If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
+```
+get_payments_by_principal : (text) -> (vec PaymentRecord) query;
+```
 
-- set`DFX_NETWORK` to `ic` if you are using Webpack
-- use your own preferred method to replace `process.env.DFX_NETWORK` in the autogenerated declarations
-  - Setting `canisters -> {asset_canister_id} -> declarations -> env_override to a string` in `dfx.json` will replace `process.env.DFX_NETWORK` with the string in the autogenerated declarations
-- Write your own `createActor` constructor
+  - **Support payment currency whitelist:**
+
+<!-- end list -->
+
+```
+manage_whitelist : (text, WhitelistOperation) -> (Result_2);
+```
+
+  - **Pay for Satslink VPN VIP:**
+
+<!-- end list -->
+
+```
+pay : (principal, nat, text, text) -> (Result_3);
+```
+
+  - **Authorize withdrawal of payment amount:**
+
+<!-- end list -->
+
+```
+withdraw : (Account, nat) -> (Result_3);
+```
+
+```
+```
