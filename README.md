@@ -1,10 +1,11 @@
 
 # Satslink
 
-**Project Overview**
+**Overview**
+
 Satslink is an innovative privacy communication application designed for Web3 users. It integrates the functionalities of a traditional VPN and leverages Sama Network's full-stack data encryption communication capabilities to provide users with end-to-end comprehensive data encryption protection.
 
-**Project Objectives**
+**Objectives**
 
 Satslink aims to:
 
@@ -13,7 +14,7 @@ Satslink aims to:
   - **Build a Secure Network Environment:** Utilize SAMA Network's consensus and business sharding technology to enhance network security and privacy.
   - **Simplify Web3 Payments:** Based on MSQ, enable direct purchase of ICP and ICRC-1 and payment of VPN service fees.
 
-📐 **Project Architecture and Function Overview**
+📐 **Project Architecture and Function**
 
 Satslink is built upon the following core technologies:
 
@@ -39,7 +40,7 @@ graph LR
 [![Twitter](about:sanitized)](https://x.com/gknmoon)
 [![Discord](about:sanitized)](https://discord.com/channels/1062661363756966020/1159441094526902324)
 
-🎯 **Provide Metadata**
+**Provide Metadata**
 
   - **Description:** Satslink is a privacy communication application that provides end-to-end encrypted VPN services for Web3 users, ensuring data security and privacy. Built on the Sama Network, it is dedicated to replacing centralized VPNs and reducing data leakage and auditing risks.
   - **Tags:** `internet-computer`, `privacy`, `VPN`, `Web3`, `encryption`, `Sama-network`, `ICP`, `ICRC-1`
