@@ -1,4 +1,3 @@
-\`\`\`markdown
 
 # Satslink
 
@@ -27,7 +26,6 @@ Satslink is built upon the following core technologies:
 
 **(Architecture Diagram)**
 
-```mermaid
 graph LR
     A[User (Android)] --> B(Satslink Client)
     A --> C{Sama Network}
@@ -35,7 +33,6 @@ graph LR
     B --> E(MSQ) --> D[Internet Computer (ICP)]
     B --> A[User (Android)]
     C --> A[User (Android)]
-```
 
 **Web3 Privacy Communication Application, Your Data, Under Your Control.**
 
