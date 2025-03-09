@@ -49,6 +49,34 @@ graph LR
       - [satslink\_client\_android](https://github.com/Sama-X/satslink_client_android) - Android client code repository
       - [satslink](https://github.com/Sama-X/satslink) - ICP - Satslink core code repository
 
+**Local development**
+
+This project is managed with script and pnpm. On Dev ..
+
+<!-- end list -->
+
+```
+./script/before_build.sh dev
+```
+
+```
+./script/extract-did.sh dev
+```
+
+```
+./script/generate-bind.sh dev
+```
+
+```
+./script/deploy.back.sh dev
+```
+
+pnpm install
+
+```
+./script/deploy.front.sh dev
+```
+
 **Core Interfaces**
 
   - **Get the number of billed users:**
@@ -107,5 +135,7 @@ pay : (principal, nat, text, text) -> (Result_3);
 withdraw : (Account, nat) -> (Result_3);
 ```
 
-```
-```
+**Contribution**
+
+Feel free to open an issue if you found a bug or want to suggest a feature.
+
